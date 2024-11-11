@@ -721,6 +721,7 @@ export class Game {
         const shieldButton = document.getElementById('shield-button');
         const medkitButton = document.getElementById('medkit-button');
 
+        // Configurar botões de habilidade
         if (shootButton) {
             shootButton.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -757,20 +758,43 @@ export class Game {
             });
         }
 
+        // Variáveis para controle de movimento
+        let isDragging = false;
         let lastTouch = null;
+        let moveInterval = null;
+
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
+            isDragging = true;
             this.touchStartPos = {
                 x: touch.clientX,
                 y: touch.clientY
             };
             lastTouch = touch;
-            
-            // Atualizar mira
+
+            // Atualizar mira inicial
             const rect = this.canvas.getBoundingClientRect();
             this.mouse.x = touch.clientX - rect.left;
             this.mouse.y = touch.clientY - rect.top;
+
+            // Iniciar movimento contínuo
+            moveInterval = setInterval(() => {
+                if (isDragging && lastTouch && this.player && this.player.isAlive) {
+                    const dx = lastTouch.clientX - this.touchStartPos.x;
+                    const dy = lastTouch.clientY - this.touchStartPos.y;
+                    const moveDistance = Math.hypot(dx, dy);
+                    
+                    if (moveDistance > 20) {
+                        const moveAngle = Math.atan2(dy, dx);
+                        const moveSpeed = Math.min(moveDistance / 50, 1) * this.player.speed;
+
+                        this.player.x += Math.cos(moveAngle) * moveSpeed;
+                        this.player.y += Math.sin(moveAngle) * moveSpeed;
+                        this.player.targetAngle = moveAngle;
+                    }
+                }
+            }, 16); // ~60fps
         });
 
         this.canvas.addEventListener('touchmove', (e) => {
@@ -778,32 +802,37 @@ export class Game {
             const touch = e.touches[0];
             lastTouch = touch;
             
-            // Atualizar posição do mouse para mira
+            // Atualizar mira
             const rect = this.canvas.getBoundingClientRect();
             this.mouse.x = touch.clientX - rect.left;
             this.mouse.y = touch.clientY - rect.top;
 
             if (this.player && this.player.isAlive) {
-                // Calcular movimento baseado na diferença do toque inicial
                 const dx = touch.clientX - this.touchStartPos.x;
                 const dy = touch.clientY - this.touchStartPos.y;
                 const moveAngle = Math.atan2(dy, dx);
-                const moveDistance = Math.hypot(dx, dy);
-                
-                // Aplicar movimento apenas se houver distância significativa
-                if (moveDistance > 20) {
-                    this.player.x += Math.cos(moveAngle) * this.player.speed;
-                    this.player.y += Math.sin(moveAngle) * this.player.speed;
-                    
-                    // Atualizar ângulo do jogador para a direção do movimento
-                    this.player.targetAngle = moveAngle;
-                }
+                this.player.targetAngle = moveAngle;
             }
         });
 
         this.canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
+            isDragging = false;
             lastTouch = null;
+            if (moveInterval) {
+                clearInterval(moveInterval);
+                moveInterval = null;
+            }
+        });
+
+        this.canvas.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            isDragging = false;
+            lastTouch = null;
+            if (moveInterval) {
+                clearInterval(moveInterval);
+                moveInterval = null;
+            }
         });
     }
 }
