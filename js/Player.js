@@ -12,7 +12,15 @@ export class Player {
         this.maxAmmo = 100;
         this.score = 0;
         this.targetAngle = 0;
-        this.speed = 3;
+        this.speed = 2.5;
+        this.baseSpeed = 2.5;
+        this.maxSpeed = 4;
+        this.acceleration = 0.25;
+        this.deceleration = 0.15;
+        this.velocity = { x: 0, y: 0 };
+        this.input = { x: 0, y: 0 };
+        this.lastPosition = { x, y };
+        this.movementSmoothing = 0.2;
 
         this.shield = {
             active: false,
@@ -40,7 +48,7 @@ export class Player {
         this.supergum = {
             active: false,
             duration: 5000,
-            speedBoost: 1.5,
+            speedBoost: 1.4,
             startTime: 0
         };
         
@@ -75,16 +83,42 @@ export class Player {
         if (mouse && canvas) {
             const dx = mouse.x - canvas.width / 2;
             const dy = mouse.y - canvas.height / 2;
-            const angle = Math.atan2(dy, dx);
+            const distance = Math.hypot(dx, dy);
+            
+            if (distance > 15) {
+                const angle = Math.atan2(dy, dx);
+                
+                const inputScale = Math.min(distance / 150, 1);
+                this.input.x = Math.cos(angle) * inputScale;
+                this.input.y = Math.sin(angle) * inputScale;
+                
+                this.velocity.x += this.input.x * this.acceleration;
+                this.velocity.y += this.input.y * this.acceleration;
+            } else {
+                this.velocity.x *= (1 - this.deceleration);
+                this.velocity.y *= (1 - this.deceleration);
+            }
 
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
+            const currentSpeed = Math.hypot(this.velocity.x, this.velocity.y);
+            if (currentSpeed > this.speed) {
+                const scale = this.speed / currentSpeed;
+                this.velocity.x *= scale;
+                this.velocity.y *= scale;
+            }
 
-            this.targetAngle = angle;
+            this.lastPosition.x = this.x;
+            this.lastPosition.y = this.y;
+            
+            const smoothing = this.movementSmoothing;
+            this.x += this.velocity.x * smoothing;
+            this.y += this.velocity.y * smoothing;
+
+            const targetAngle = Math.atan2(dy, dx);
+            const angleDiff = targetAngle - this.targetAngle;
+            this.targetAngle += angleDiff * 0.1;
         }
 
         this.updateEffects();
-
         this.checkSafeZone(safeZone);
     }
 
@@ -152,7 +186,8 @@ export class Player {
 
         if (this.supergum.active && Date.now() - this.supergum.startTime >= this.supergum.duration) {
             this.supergum.active = false;
-            this.speed /= this.supergum.speedBoost;
+            this.speed = this.baseSpeed;
+            this.maxSpeed = this.speed * 1.5;
         }
 
         if (this.laser.active && Date.now() - this.laser.startTime >= this.laser.duration) {
@@ -334,11 +369,13 @@ export class Player {
         if (!this.supergum.active) {
             this.supergum.active = true;
             this.supergum.startTime = Date.now();
-            this.speed *= this.supergum.speedBoost;
+            this.speed = this.baseSpeed * this.supergum.speedBoost;
+            this.maxSpeed = this.speed * 1.5;
 
             setTimeout(() => {
                 this.supergum.active = false;
-                this.speed /= this.supergum.speedBoost;
+                this.speed = this.baseSpeed;
+                this.maxSpeed = this.speed * 1.5;
             }, this.supergum.duration);
         }
     }

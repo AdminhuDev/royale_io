@@ -2,7 +2,6 @@ import { SafeZoneManager } from './SafeZoneManager.js';
 import { Player } from './Player.js';
 import { BotManager } from './Bots.js';
 import { UIManager } from './UIManager.js';
-import { Effects } from './Effects.js';
 import { LootManager } from './LootManager.js';
 import { BulletManager } from './BulletManager.js';
 import { NetworkManager } from './NetworkManager.js';
@@ -23,25 +22,20 @@ export class Game {
         this.setupEventListeners();
         this.gameLoop();
 
-        // Inicializar NetworkManager
         this.network = new NetworkManager(this);
         
-        // Adicionar estado de rede
         this.isMultiplayer = true;
         this.otherPlayers = new Map();
 
-        // Adicionar monitoramento de performance
         this.lastFrameTime = performance.now();
         this.frameCount = 0;
         this.fps = 0;
         this.fpsUpdateInterval = setInterval(() => this.updateFPS(), 1000);
 
-        // Adicionar propriedades de tiro
         this.firing = false;
         this.lastShotTime = 0;
-        this.shotCooldown = 200; // 200ms entre tiros
+        this.shotCooldown = 200;
 
-        // Adicionar suporte a touch
         this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         this.touchStartPos = { x: 0, y: 0 };
         this.setupTouchControls();
@@ -57,29 +51,96 @@ export class Game {
         this.player.game = this;
 
         // Depois os managers que dependem do SafeZone
-        this.botManager = new BotManager(this.TOTAL_PLAYERS-1, this.canvas);
+        this.botManager = null;
         this.ui = new UIManager(this);
         this.bulletManager = new BulletManager(this);
-        
-        // LootManager por último, já que depende do SafeZone
         this.lootManager = new LootManager(this);
-        // Só iniciar o spawn quando o jogo realmente começar
-        if (this.gameState === 'playing') {
-            this.lootManager.startLootSpawning();
-        }
-
+        
+        // Inicializar NetworkManager por último
+        this.network = new NetworkManager(this);
+        
+        // Definir estado inicial
         this.gameState = 'waiting';
         this.waitingScreen = document.getElementById('waiting-screen');
         this.countdownElement = document.getElementById('countdown');
         this.mouse = {x: this.player.x, y: this.player.y};
         this.camera = {x: 0, y: 0, width: this.canvas.width, height: this.canvas.height};
-
+        
+        // Inicializar outras propriedades
         this.checkingWinner = false;
         this.gameEnded = false;
         this.victoryRoyale = false;
         this.deathProcessed = false;
+        this.otherPlayers = new Map();
+        this.countdownStarted = false;
 
-        this.setupButtons();
+        // Mostrar tela de espera
+        if (this.waitingScreen) {
+            this.waitingScreen.style.display = 'flex';
+        }
+    }
+
+    startCountdown(seconds) {
+        let timeLeft = seconds;
+        
+        const updateCountdown = () => {
+            if (this.countdownElement) {
+                this.countdownElement.textContent = timeLeft;
+            }
+            
+            if (timeLeft <= 0) {
+                this.startGame();
+            } else {
+                timeLeft--;
+                setTimeout(updateCountdown, 1000);
+            }
+        };
+
+        updateCountdown();
+    }
+
+    startGame() {
+        this.gameState = 'playing';
+        
+        // Esconder tela de espera
+        if (this.waitingScreen) {
+            this.waitingScreen.style.display = 'none';
+        }
+        
+        // Mostrar elementos do jogo
+        if (this.ui) {
+            this.ui.showGameElements();
+        }
+        
+        // Calcular número de bots baseado em jogadores reais
+        const realPlayers = this.network ? this.network.currentPlayers : 1;
+        const numBots = Math.max(0, this.TOTAL_PLAYERS - realPlayers);
+        
+        // Inicializar BotManager com o número correto de bots
+        this.botManager = new BotManager(numBots, this.canvas);
+        
+        // Posicionar jogador em local seguro
+        let spawnPos;
+        if (this.network) {
+            spawnPos = this.network.calculateSafeSpawnPosition();
+        } else {
+            spawnPos = {
+                x: this.canvas.width / 2,
+                y: this.canvas.height / 2
+            };
+        }
+        
+        this.player.x = spawnPos.x;
+        this.player.y = spawnPos.y;
+        
+        // Iniciar sistemas do jogo
+        this.safeZone.reset();
+        this.lootManager.startLootSpawning();
+        
+        // Iniciar loop do jogo
+        this.gameLoop();
+
+        console.log(`Jogo iniciado com ${realPlayers} jogadores reais e ${numBots} bots`);
     }
 
     setupButtons() {
@@ -187,35 +248,52 @@ export class Game {
     }
 
     draw() {
+        if (!this.ctx || !this.canvas) return;
+        
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.save();
 
-        const cameraX = this.player.x - this.canvas.width/2;
-        const cameraY = this.player.y - this.canvas.height/2;
-        this.ctx.translate(-cameraX, -cameraY);
+        // Calcular posição da câmera apenas se o player existir
+        if (this.player) {
+            const cameraX = this.player.x - this.canvas.width/2;
+            const cameraY = this.player.y - this.canvas.height/2;
+            this.ctx.translate(-cameraX, -cameraY);
+        }
 
+        // Desenhar elementos do jogo
         this.drawGameElements();
 
-        this.otherPlayers.forEach(player => {
-            if (player.isAlive) {
-                player.draw(this.ctx);
-            }
-        });
+        // Desenhar outros jogadores
+        if (this.otherPlayers) {
+            this.otherPlayers.forEach(player => {
+                if (player && player.isAlive) {
+                    player.draw(this.ctx);
+                }
+            });
+        }
 
         this.ctx.restore();
 
-        if (this.player.isAlive) {
+        // Desenhar crosshair apenas se o player estiver vivo
+        if (this.player && this.player.isAlive && this.mouse) {
             this.drawCrosshair();
         }
     }
 
     drawGameElements() {
-        this.safeZone.draw(this.ctx);
-        this.bulletManager.draw(this.ctx);
-        this.lootManager.draw(this.ctx);
-        this.botManager.draw(this.ctx);
-        
-        if (this.player.isAlive) {
+        if (this.safeZone) {
+            this.safeZone.draw(this.ctx);
+        }
+        if (this.bulletManager) {
+            this.bulletManager.draw(this.ctx);
+        }
+        if (this.lootManager) {
+            this.lootManager.draw(this.ctx);
+        }
+        if (this.botManager) {
+            this.botManager.draw(this.ctx);
+        }
+        if (this.player && this.player.isAlive) {
             this.player.draw(this.ctx);
         }
     }
@@ -319,34 +397,56 @@ export class Game {
         if (this.gameEnded) return;
 
         // Contar jogadores vivos
-        const aliveBots = this.botManager.bots.filter(bot => bot.isAlive).length;
-        const alivePlayers = this.isMultiplayer ? 
-            Array.from(this.network.players.values()).filter(p => p.isAlive).length : 0;
-        const totalAlive = aliveBots + alivePlayers + (this.player.isAlive ? 1 : 0);
+        const aliveBots = this.botManager?.bots.filter(bot => bot.isAlive).length || 0;
+        const aliveNetworkPlayers = Array.from(this.otherPlayers.values())
+            .filter(player => player.isAlive).length;
+        const totalAlive = aliveBots + aliveNetworkPlayers + (this.player.isAlive ? 1 : 0);
         
         this.playersAlive = totalAlive;
-        this.ui.updatePlayersAlive(this.playersAlive);
+        if (this.ui) {
+            this.ui.updatePlayersAlive(this.playersAlive);
+        }
 
         // Verificar condições de fim de jogo
         if (!this.player.isAlive && !this.deathProcessed) {
             this.handlePlayerDeath();
         } else if (totalAlive === 1 && this.player.isAlive) {
             this.handleVictory();
-        } else if (totalAlive === 1 && !this.player.isAlive) {
+        } else if (totalAlive === 1) {
+            // Verificar vencedor entre bots e jogadores online
             const winnerBot = this.botManager.bots.find(bot => bot.isAlive);
+            const winnerPlayer = Array.from(this.otherPlayers.values())
+                .find(player => player.isAlive);
+            
             if (winnerBot) {
                 this.gameEnded = true;
                 this.gameState = 'gameover';
-                this.ui.showBotVictoryScreen();
+                this.ui?.showBotVictoryScreen();
+            } else if (winnerPlayer) {
+                this.gameEnded = true;
+                this.gameState = 'gameover';
+                this.ui?.showGameOver(`${winnerPlayer.name} venceu!`);
             }
         }
     }
 
     handlePlayerDeath() {
+        if (this.deathProcessed) return; // Evitar processamento múltiplo
+        
         this.deathProcessed = true;
         this.gameState = 'gameover';
         this.gameEnded = true;
-        this.ui.showDeathScreen(false); // Sempre false pois não há mais espectador
+
+        // Salvar score antes de limpar
+        const finalScore = this.player ? this.player.score : 0;
+        
+        // Limpar jogo
+        this.cleanupGame();
+
+        // Mostrar tela de morte com o score salvo
+        if (this.ui) {
+            this.ui.showDeathScreen(false, finalScore);
+        }
     }
 
     handleVictory() {
@@ -357,8 +457,57 @@ export class Game {
             
             const finalScore = this.player.score + Math.round(this.player.health);
             this.player.addScore(50); // Bônus de vitória
+            this.cleanupGame();
             this.ui.showVictoryScreen(finalScore);
         }
+    }
+
+    cleanupGame() {
+        // Parar o loop do jogo
+        this.gameState = 'menu';
+        this.gameEnded = true;
+        
+        // Salvar score antes de destruir o jogador
+        const finalScore = this.player ? this.player.score : 0;
+        localStorage.setItem('playerScore', finalScore.toString());
+
+        // Limpar sistemas
+        if (this.bulletManager) {
+            this.bulletManager.destroy();
+            this.bulletManager = null;
+        }
+
+        if (this.lootManager) {
+            this.lootManager.destroy();
+            this.lootManager = null;
+        }
+
+        if (this.botManager) {
+            this.botManager.destroy();
+            this.botManager = null;
+        }
+
+        if (this.network) {
+            this.network.destroy();
+            this.network = null;
+        }
+
+        // Limpar jogadores
+        this.otherPlayers.clear();
+        
+        // Limpar canvas
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        // Destruir jogador por último
+        if (this.player) {
+            this.player.destroy();
+            this.player = null;
+        }
+
+        // Limpar mouse
+        this.mouse = null;
     }
 
     resetGame() {
@@ -372,14 +521,24 @@ export class Game {
     }
 
     startNewGame() {
-        if (this.gameState !== 'destroyed') {
-            this.destroy();
+        // Limpar jogo anterior
+        this.cleanupGame();
+        
+        // Reinicializar tudo
+        this.setupCanvas();
+        this.initializeGame();
+        this.setupEventListeners();
+        
+        // Resetar flags
+        this.deathProcessed = false;
+        this.gameEnded = false;
+        
+        // Mostrar tela de espera
+        if (this.waitingScreen) {
+            this.waitingScreen.style.display = 'flex';
         }
 
-        this.initializeNewGame();
-        this.setupVisibility();
-        this.setupEventListeners();
-        this.startCountdown();
+        console.log('Novo jogo iniciado');
     }
 
     initializeNewGame() {
@@ -415,40 +574,16 @@ export class Game {
     }
 
     destroy() {
-        this.gameState = 'destroyed';
+        this.cleanupGame();
         this.removeEventListeners();
         
-        // Limpar componentes de forma segura
-        const components = [
-            'ui', 'botManager', 'safeZone', 'player', 
-            'bulletManager', 'lootManager', 'network'
-        ];
+        // Limpar referências
+        this.canvas = null;
+        this.ctx = null;
+        this.ui = null;
+        this.safeZone = null;
         
-        components.forEach(component => {
-            if (this[component]?.destroy) {
-                try {
-                    this[component].destroy();
-                } catch (error) {
-                    console.error(`Erro ao destruir ${component}:`, error);
-                }
-                this[component] = null;
-            }
-        });
-        
-        // Limpar arrays e timers
-        this.bullets = [];
-        this.loots = [];
-        this.otherPlayers.clear();
-        
-        if (this.fpsUpdateInterval) {
-            clearInterval(this.fpsUpdateInterval);
-            this.fpsUpdateInterval = null;
-        }
-
-        // Limpar canvas
-        if (this.ctx && this.canvas) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
+        console.log('Jogo destruído completamente');
     }
 
     removeEventListeners() {
@@ -541,8 +676,17 @@ export class Game {
         if (!this.canvas) return;
         
         const rect = this.canvas.getBoundingClientRect();
-        this.mouse.x = e.clientX - rect.left;
-        this.mouse.y = e.clientY - rect.top;
+        const newMouseX = e.clientX - rect.left;
+        const newMouseY = e.clientY - rect.top;
+
+        // Suavizar movimento do mouse
+        if (!this.mouse) {
+            this.mouse = { x: newMouseX, y: newMouseY };
+        } else {
+            const smoothing = 0.5;
+            this.mouse.x += (newMouseX - this.mouse.x) * smoothing;
+            this.mouse.y += (newMouseY - this.mouse.y) * smoothing;
+        }
 
         if (this.gameState === 'playing' && !this.spectatorMode && this.player) {
             const dx = this.mouse.x - this.canvas.width/2;
@@ -636,47 +780,6 @@ export class Game {
         }
     }
 
-    startGame() {
-        this.gameState = 'playing';
-        this.gameEnded = false;
-        this.deathProcessed = false;
-        
-        // Posicionar jogador em local seguro
-        const spawnPos = this.network ? 
-            this.network.calculateSafeSpawnPosition() : 
-            {
-                x: this.canvas.width / 2,
-                y: this.canvas.height / 2
-            };
-        
-        this.player.x = spawnPos.x;
-        this.player.y = spawnPos.y;
-        
-        // Iniciar sistemas
-        this.safeZone.reset();
-        this.lootManager.startLootSpawning();
-        
-        // Mostrar UI do jogo e esconder tela de espera
-        if (this.ui) {
-            this.ui.hideWaitingScreen();
-            this.ui.showGameElements();
-        }
-
-        // Esconder waiting screen e mostrar elementos do jogo
-        if (this.waitingScreen) {
-            this.waitingScreen.style.display = 'none';
-        }
-        
-        const elements = [
-            document.querySelector('.zone-info'),
-            document.querySelector('.player-ui')
-        ];
-        
-        elements.forEach(el => {
-            if (el) el.style.display = 'flex';
-        });
-    }
-
     startOfflineGame() {
         Logger.info('Iniciando jogo offline');
         this.isMultiplayer = false;
@@ -706,6 +809,11 @@ export class Game {
         this.player.update(this.mouse, this.canvas, this.safeZone);
         this.handlePlayerShooting();
         
+        // Enviar atualizações para o servidor
+        if (this.network) {
+            this.network.updatePosition();
+        }
+        
         if (this.ui) {
             this.ui.updateHealth(this.player.health);
             this.ui.updateAmmo(this.player.ammo);
@@ -717,51 +825,8 @@ export class Game {
     setupTouchControls() {
         if (!this.isTouchDevice) return;
 
-        const shootButton = document.getElementById('shoot-button');
-        const shieldButton = document.getElementById('shield-button');
-        const medkitButton = document.getElementById('medkit-button');
-
-        // Configurar botões de habilidade
-        if (shootButton) {
-            shootButton.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                this.firing = true;
-                shootButton.classList.add('active');
-            });
-
-            shootButton.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                this.firing = false;
-                shootButton.classList.remove('active');
-            });
-        }
-
-        if (shieldButton) {
-            shieldButton.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (this.player && !this.player.shield.active && !this.player.shield.cooldown) {
-                    this.player.activateShield();
-                    shieldButton.classList.add('active');
-                    setTimeout(() => shieldButton.classList.remove('active'), 200);
-                }
-            });
-        }
-
-        if (medkitButton) {
-            medkitButton.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (this.player && !this.player.medkits.active && !this.player.medkits.cooldown) {
-                    this.player.activateHealing();
-                    medkitButton.classList.add('active');
-                    setTimeout(() => medkitButton.classList.remove('active'), 200);
-                }
-            });
-        }
-
-        // Variáveis para controle de movimento
         let isDragging = false;
         let lastTouch = null;
-        let moveInterval = null;
 
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -773,28 +838,11 @@ export class Game {
             };
             lastTouch = touch;
 
-            // Atualizar mira inicial
             const rect = this.canvas.getBoundingClientRect();
-            this.mouse.x = touch.clientX - rect.left;
-            this.mouse.y = touch.clientY - rect.top;
-
-            // Iniciar movimento contínuo
-            moveInterval = setInterval(() => {
-                if (isDragging && lastTouch && this.player && this.player.isAlive) {
-                    const dx = lastTouch.clientX - this.touchStartPos.x;
-                    const dy = lastTouch.clientY - this.touchStartPos.y;
-                    const moveDistance = Math.hypot(dx, dy);
-                    
-                    if (moveDistance > 20) {
-                        const moveAngle = Math.atan2(dy, dx);
-                        const moveSpeed = Math.min(moveDistance / 50, 1) * this.player.speed;
-
-                        this.player.x += Math.cos(moveAngle) * moveSpeed;
-                        this.player.y += Math.sin(moveAngle) * moveSpeed;
-                        this.player.targetAngle = moveAngle;
-                    }
-                }
-            }, 16); // ~60fps
+            this.mouse = {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
         });
 
         this.canvas.addEventListener('touchmove', (e) => {
@@ -802,36 +850,20 @@ export class Game {
             const touch = e.touches[0];
             lastTouch = touch;
             
-            // Atualizar mira
             const rect = this.canvas.getBoundingClientRect();
-            this.mouse.x = touch.clientX - rect.left;
-            this.mouse.y = touch.clientY - rect.top;
-
-            if (this.player && this.player.isAlive) {
-                const dx = touch.clientX - this.touchStartPos.x;
-                const dy = touch.clientY - this.touchStartPos.y;
-                const moveAngle = Math.atan2(dy, dx);
-                this.player.targetAngle = moveAngle;
-            }
+            this.mouse = {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
         });
 
         this.canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
             isDragging = false;
             lastTouch = null;
-            if (moveInterval) {
-                clearInterval(moveInterval);
-                moveInterval = null;
-            }
-        });
-
-        this.canvas.addEventListener('touchcancel', (e) => {
-            e.preventDefault();
-            isDragging = false;
-            lastTouch = null;
-            if (moveInterval) {
-                clearInterval(moveInterval);
-                moveInterval = null;
+            if (this.player) {
+                this.player.velocity.x *= 0.5;
+                this.player.velocity.y *= 0.5;
             }
         });
     }

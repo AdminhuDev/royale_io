@@ -4,14 +4,13 @@ export class BulletManager {
     constructor(game) {
         this.game = game;
         this.bullets = [];
-        this.bulletSpeed = 8;
+        this.bulletSpeed = 4;
         this.bulletSize = 5;
         this.bulletColor = '#0A84FF';
-        this.fireRate = 5;
+        this.fireRate = 4;
         this.fireInterval = 1000/this.fireRate;
         this.lastFireTime = 0;
         this.isFiring = false;
-        this.networkBullets = new Map();
     }
 
     fireBullet(sourceX, sourceY, targetX, targetY, shooter, bulletColor) {
@@ -21,7 +20,7 @@ export class BulletManager {
         }
 
         const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
-        const spread = (Math.random() - 0.5) * 0.2;
+        const spread = (Math.random() - 0.5) * 0.15;
         const bulletX = sourceX + Math.cos(angle) * (shooter.size + this.bulletSize + 1);
         const bulletY = sourceY + Math.sin(angle) * (shooter.size + this.bulletSize + 1);
 
@@ -43,11 +42,6 @@ export class BulletManager {
             shooter.updateAmmo(-1);
         }
 
-        if (shooter.isNetworkPlayer) {
-            const bulletId = Date.now().toString();
-            this.networkBullets.set(bulletId, bullet);
-        }
-
         return true;
     }
 
@@ -66,10 +60,21 @@ export class BulletManager {
                 return false;
             }
 
+            this.game.otherPlayers.forEach(otherPlayer => {
+                if (otherPlayer.isAlive && bullet.shooter !== otherPlayer && 
+                    !otherPlayer.shield.active && this.checkCollision(bullet, otherPlayer)) {
+                    otherPlayer.takeDamage(bullet.damage);
+                    if (bullet.shooter === this.game.player) {
+                        this.game.player.addScore(10);
+                    }
+                    return false;
+                }
+            });
+
             for (const bot of this.game.botManager.bots) {
-                if (this.checkCollision(bullet, bot)) {
+                if (bot.isAlive && this.checkCollision(bullet, bot)) {
                     bot.takeDamage(bullet.damage);
-                    if (!bot.isAlive && bullet.shooter === this.game.player) {
+                    if (bullet.shooter === this.game.player) {
                         this.game.player.addScore(10);
                     }
                     return false;
@@ -89,7 +94,14 @@ export class BulletManager {
 
     draw(ctx) {
         this.bullets.forEach(bullet => {
-            Effects.drawBulletEffect(ctx, bullet);
+            ctx.save();
+            ctx.shadowColor = bullet.color;
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+            ctx.fillStyle = bullet.color;
+            ctx.fill();
+            ctx.restore();
         });
     }
 

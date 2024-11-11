@@ -60,12 +60,17 @@ class Bot {
         this.isAlive = true;
         this.ammo = 30;
         this.targetAngle = 0;
-        this.speed = 2;
+        this.speed = 1.8;
+        this.baseSpeed = 1.8;
+        this.chaseSpeed = 2.2;
         this.moveDirection = Math.random() * Math.PI * 2;
         this.skin = skin;
         this.lastDamageTime = Date.now();
         this.damageInterval = 500;
         this.safeZoneMargin = 50;
+        this.state = 'wandering';
+        this.targetChangeInterval = 2000;
+        this.lastDirectionChange = Date.now();
     }
 
     update(safeZoneConfig, bulletsArray, player, otherBots) {
@@ -76,13 +81,16 @@ class Bot {
         const distanceFromCenter = Math.hypot(dxFromCenter, dyFromCenter);
         const angleToCenter = Math.atan2(dyFromCenter, dxFromCenter);
 
+        let currentSpeed = this.baseSpeed;
+
         if (distanceFromCenter > safeZoneConfig.currentRadius - this.safeZoneMargin) {
+            this.state = 'retreating';
             this.moveDirection = angleToCenter + Math.PI;
-            this.speed = 3;
+            currentSpeed = this.chaseSpeed;
         } else {
-            this.speed = 2;
+            const now = Date.now();
             
-            if (Math.random() < 0.01) {
+            if (now - this.lastDirectionChange > this.targetChangeInterval && this.state === 'wandering') {
                 if (Math.random() < 0.8) {
                     const safeAngle = Math.atan2(
                         safeZoneConfig.centerY - this.y,
@@ -92,11 +100,27 @@ class Bot {
                 } else {
                     this.moveDirection = Math.random() * Math.PI * 2;
                 }
+                this.lastDirectionChange = now;
+            }
+
+            if (player && player.isAlive) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const playerDistance = Math.hypot(dx, dy);
+
+                if (playerDistance < 300) {
+                    this.state = 'chasing';
+                    this.moveDirection = Math.atan2(dy, dx);
+                    currentSpeed = this.chaseSpeed;
+                } else {
+                    this.state = 'wandering';
+                    currentSpeed = this.baseSpeed;
+                }
             }
         }
 
-        const nextX = this.x + Math.cos(this.moveDirection) * this.speed;
-        const nextY = this.y + Math.sin(this.moveDirection) * this.speed;
+        const nextX = this.x + Math.cos(this.moveDirection) * currentSpeed;
+        const nextY = this.y + Math.sin(this.moveDirection) * currentSpeed;
 
         const nextDistanceFromCenter = Math.hypot(
             nextX - safeZoneConfig.centerX,

@@ -826,11 +826,14 @@ export class UIManager {
         }
     }
 
-    showDeathScreen(canSpectate) {
+    showDeathScreen(canSpectate = false, finalScore = 0) {
         const deathChoice = document.getElementById('death-choice');
         const deathMessage = document.getElementById('death-message');
         
         if (!deathChoice || !deathMessage) return;
+
+        // Esconder elementos do jogo
+        this.hideGameElements();
 
         // Configurar tela de morte
         deathChoice.style.display = 'flex';
@@ -838,15 +841,26 @@ export class UIManager {
         deathMessage.style.color = '#FF453A';
 
         // Atualizar estatísticas
-        this.updateDeathStats();
+        this.updateDeathStats(finalScore);
 
-        // Configurar botão de voltar
+        // Configurar botões
         const backButton = document.getElementById('back-button');
         if (backButton) {
             backButton.onclick = () => {
                 deathChoice.style.display = 'none';
                 this.showStartScreen();
             };
+        }
+    }
+
+    updateDeathStats(finalScore = 0) {
+        const gameTime = this.formatGameTime(Date.now() - this.gameStartTime);
+        
+        if (this.deathScore) {
+            this.deathScore.textContent = this.formatScore(finalScore);
+        }
+        if (this.deathTime) {
+            this.deathTime.textContent = gameTime;
         }
     }
 
@@ -909,18 +923,6 @@ export class UIManager {
                 deathChoice.style.display = 'none';
                 this.showStartScreen();
             };
-        }
-    }
-
-    updateDeathStats(finalScore = null) {
-        const gameTime = this.formatGameTime(Date.now() - this.gameStartTime);
-        
-        if (this.deathScore) {
-            const score = finalScore || this.game.player.score;
-            this.deathScore.textContent = this.formatScore(score);
-        }
-        if (this.deathTime) {
-            this.deathTime.textContent = gameTime;
         }
     }
 

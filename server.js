@@ -1,256 +1,299 @@
 import express from 'express';
 import { createServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const TICK_RATE = 60;
+const UPDATE_RATE = 20;
 
-const app = express();
-const server = createServer(app);
-const wss = new WebSocketServer({ server });
-
-// Configurar MIME types
-app.use(express.static('./', {
-    setHeaders: (res, path) => {
-        // Definir MIME type correto para arquivos CSS
-        if (path.endsWith('.css')) {
-            res.setHeader('Content-Type', 'text/css');
-        }
+class GameServer {
+    constructor(port) {
+        this.app = express();
+        this.server = createServer(this.app);
+        this.wss = new WebSocketServer({ server: this.server });
+        
+        this.rooms = new Map();
+        this.players = new Map();
+        
+        this.maxPlayers = 10;
+        this.minPlayersToStart = 1;
+        
+        this.countdownStarted = false;
+        this.countdownTime = 15;
+        this.readyPlayers = new Set();
+        this.countdownInterval = null;
+        
+        this.setupServer();
+        this.startGameLoop();
+        
+        this.server.listen(port, () => {
+            console.log(`Servidor rodando na porta ${port}`);
+        });
     }
-}));
 
-// Rota principal
-app.get('/', (req, res) => {
-    res.sendFile(join(__dirname, 'index.html'));
-});
-
-// Gerenciar conexões WebSocket
-const rooms = new Map();
-const PLAYERS_PER_ROOM = 10;
-const ROOM_TIMEOUT = 15000; // 15 segundos fixos
-
-function createRoom() {
-    const roomId = uuidv4();
-    const room = {
-        players: new Map(),
-        gameStarted: false,
-        createdAt: Date.now(),
-        timeoutId: setTimeout(() => startGameIfReady(roomId), ROOM_TIMEOUT),
-        updateInterval: setInterval(() => broadcastTimeLeft(roomId), 1000) // Atualizar a cada segundo
-    };
-    
-    rooms.set(roomId, room);
-    return roomId;
-}
-
-function findAvailableRoom() {
-    for (const [roomId, room] of rooms) {
-        if (room.players.size < PLAYERS_PER_ROOM && !room.gameStarted) {
-            return roomId;
-        }
+    setupServer() {
+        this.app.use(express.static('./'));
+        this.wss.on('connection', this.handleConnection.bind(this));
     }
-    return createRoom();
-}
 
-wss.on('connection', (ws) => {
-    const playerId = uuidv4();
-    console.log(`Novo jogador conectado: ${playerId}`);
-    
-    ws.playerId = playerId;
-    ws.send(JSON.stringify({
-        type: 'playerId',
-        id: playerId
-    }));
+    handleConnection(ws) {
+        const playerId = uuidv4();
+        
+        this.players.set(playerId, {
+            ws,
+            data: null,
+            lastHeartbeat: Date.now(),
+            inputs: []
+        });
 
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            handleMessage(ws, playerId, data);
-        } catch (error) {
-            console.error('Erro ao processar mensagem:', error);
-        }
-    });
+        ws.send(JSON.stringify({
+            type: 'init',
+            id: playerId,
+            serverInfo: {
+                currentPlayers: this.players.size,
+                maxPlayers: this.maxPlayers,
+                minPlayersToStart: this.minPlayersToStart
+            }
+        }));
 
-    ws.on('close', () => {
-        handlePlayerDisconnect(playerId);
-    });
-});
+        this.broadcastPlayersCount();
+        this.sendPlayersList(ws);
 
-function handleMessage(ws, playerId, data) {
-    switch(data.type) {
-        case 'joinRoom':
-            const roomId = findAvailableRoom();
-            const room = rooms.get(roomId);
-            
-            room.players.set(playerId, {
-                ws,
-                data: {
+        ws.on('message', (message) => this.handleMessage(playerId, JSON.parse(message)));
+        ws.on('close', () => {
+            this.handleDisconnect(playerId);
+            this.broadcastPlayersCount();
+        });
+    }
+
+    sendPlayersList(ws) {
+        const playersList = Array.from(this.players.entries())
+            .filter(([_, player]) => player.data)
+            .map(([id, player]) => ({
+                id,
+                ...player.data
+            }));
+
+        ws.send(JSON.stringify({
+            type: 'playersList',
+            players: playersList
+        }));
+    }
+
+    broadcastPlayers() {
+        const playersList = Array.from(this.players.entries())
+            .filter(([_, player]) => player.data)
+            .map(([id, player]) => ({
+                id,
+                ...player.data
+            }));
+
+        this.broadcast({
+            type: 'playersList',
+            players: playersList
+        });
+    }
+
+    handleMessage(playerId, data) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        switch(data.type) {
+            case 'join':
+                player.data = {
                     name: data.name,
                     skin: data.skin,
-                    position: data.position
+                    position: data.position,
+                    health: 100,
+                    isAlive: true
+                };
+                this.broadcastPlayers();
+                break;
+
+            case 'position':
+                if (player.data) {
+                    player.data.position = {
+                        x: data.x,
+                        y: data.y,
+                        angle: data.angle
+                    };
+                    // Broadcast imediato da posição
+                    this.broadcast({
+                        type: 'playerPosition',
+                        id: playerId,
+                        position: player.data.position
+                    }, playerId);
                 }
-            });
+                break;
 
-            ws.roomId = roomId;
+            case 'shot':
+                this.broadcast({
+                    type: 'shot',
+                    playerId: playerId,
+                    ...data
+                });
+                break;
+
+            case 'heartbeat':
+                player.lastHeartbeat = Date.now();
+                player.ws.send(JSON.stringify({
+                    type: 'pong',
+                    timestamp: data.timestamp
+                }));
+                break;
+
+            case 'readyToStart':
+                this.readyPlayers.add(playerId);
+                if (this.readyPlayers.size >= this.minPlayersToStart && !this.countdownStarted) {
+                    this.startCountdown();
+                }
+                break;
+        }
+    }
+
+    startCountdown() {
+        if (this.players.size < this.minPlayersToStart) {
+            console.log('Aguardando pelo menos 1 jogador');
+            this.countdownStarted = false;
+            this.readyPlayers.clear();
             
-            const timeLeft = Math.max(0, ROOM_TIMEOUT - (Date.now() - room.createdAt));
+            this.broadcast({
+                type: 'countdownCancelled',
+                reason: 'Aguardando jogadores'
+            });
             
-            ws.send(JSON.stringify({
-                type: 'roomAssigned',
-                roomId,
-                playersInRoom: room.players.size,
-                maxPlayers: PLAYERS_PER_ROOM,
+            return;
+        }
+
+        this.countdownStarted = true;
+        let timeLeft = this.countdownTime;
+
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+        }
+
+        this.countdownInterval = setInterval(() => {
+            if (this.players.size < this.minPlayersToStart) {
+                clearInterval(this.countdownInterval);
+                this.countdownStarted = false;
+                this.readyPlayers.clear();
+                
+                this.broadcast({
+                    type: 'countdownCancelled',
+                    reason: 'Aguardando jogadores'
+                });
+                
+                return;
+            }
+
+            this.broadcast({
+                type: 'countdown',
                 timeLeft: timeLeft,
-                players: getPlayersInRoom(roomId)
-            }));
-
-            broadcastToRoom(roomId, {
-                type: 'playerJoined',
-                player: {
-                    id: playerId,
-                    ...room.players.get(playerId).data
-                },
-                playersInRoom: room.players.size,
-                maxPlayers: PLAYERS_PER_ROOM,
-                timeLeft: timeLeft
-            }, playerId);
-
-            break;
-
-        case 'position':
-        case 'shot':
-        case 'death':
-            if (ws.roomId) {
-                broadcastToRoom(ws.roomId, {
-                    ...data,
-                    id: playerId,
-                    roomId: ws.roomId
-                }, playerId);
-            }
-            break;
-
-        case 'ping':
-            ws.send(JSON.stringify({
-                type: 'pong',
-                timestamp: data.timestamp
-            }));
-            break;
-    }
-}
-
-function broadcastToRoom(roomId, data, excludeId = null) {
-    const room = rooms.get(roomId);
-    if (!room) return;
-
-    room.players.forEach((player, id) => {
-        if (id !== excludeId && player.ws.readyState === WebSocket.OPEN) {
-            player.ws.send(JSON.stringify(data));
-        }
-    });
-}
-
-function getPlayersInRoom(roomId) {
-    const room = rooms.get(roomId);
-    if (!room) return [];
-
-    return Array.from(room.players.entries())
-        .filter(([_, player]) => player.data)
-        .map(([id, player]) => ({
-            id,
-            ...player.data
-        }));
-}
-
-function startGameIfReady(roomId) {
-    const room = rooms.get(roomId);
-    if (!room || room.gameStarted) return;
-
-    clearTimeout(room.timeoutId);
-    clearInterval(room.updateInterval);
-
-    room.gameStarted = true;
-    const playerCount = room.players.size;
-    
-    console.log(`Iniciando jogo na sala ${roomId} com ${playerCount} jogadores`);
-    
-    // Gerar posições iniciais
-    const positions = {};
-    room.players.forEach((player, id) => {
-        positions[id] = {
-            x: Math.random() * 1000 + 500,
-            y: Math.random() * 1000 + 500
-        };
-    });
-
-    // Obter lista atualizada de jogadores
-    const currentPlayers = getPlayersInRoom(roomId);
-    
-    broadcastToRoom(roomId, {
-        type: 'gameStart',
-        timestamp: Date.now(),
-        playerCount: playerCount,
-        totalPlayers: PLAYERS_PER_ROOM,
-        players: currentPlayers,
-        positions: positions
-    });
-}
-
-function handlePlayerDisconnect(playerId) {
-    for (const [roomId, room] of rooms) {
-        if (room.players.has(playerId)) {
-            room.players.delete(playerId);
-            console.log(`Jogador ${playerId} saiu da sala: ${roomId}`);
-            console.log(`Jogadores na sala ${roomId}: ${room.players.size}/${PLAYERS_PER_ROOM}`);
-            
-            broadcastToRoom(roomId, {
-                type: 'playerLeft',
-                id: playerId,
-                playersInRoom: room.players.size,
-                maxPlayers: PLAYERS_PER_ROOM
+                currentPlayers: this.players.size,
+                minPlayers: this.minPlayersToStart
             });
-            
-            if (room.players.size === 0) {
-                rooms.delete(roomId);
-                console.log(`Sala ${roomId} fechada por falta de jogadores`);
+
+            if (timeLeft <= 0) {
+                clearInterval(this.countdownInterval);
+                this.broadcast({ type: 'gameStart' });
+                this.countdownStarted = false;
+                this.readyPlayers.clear();
             }
-            break;
+
+            timeLeft--;
+        }, 1000);
+    }
+
+    handleDisconnect(playerId) {
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        this.players.delete(playerId);
+        this.readyPlayers.delete(playerId);
+        
+        this.broadcast({
+            type: 'playerLeft',
+            id: playerId
+        });
+
+        if (this.players.size < this.minPlayersToStart) {
+            if (this.countdownInterval) {
+                clearInterval(this.countdownInterval);
+                this.countdownInterval = null;
+            }
+            this.countdownStarted = false;
+            this.readyPlayers.clear();
+            
+            this.broadcast({
+                type: 'countdownCancelled',
+                reason: 'Aguardando jogadores'
+            });
         }
+
+        this.broadcastPlayersCount();
+    }
+
+    broadcast(data, excludeId = null) {
+        this.wss.clients.forEach(client => {
+            if (client.readyState === 1) { // WebSocket.OPEN
+                const clientId = Array.from(this.players.entries())
+                    .find(([_, p]) => p.ws === client)?.[0];
+                
+                if (clientId !== excludeId) {
+                    client.send(JSON.stringify(data));
+                }
+            }
+        });
+    }
+
+    startGameLoop() {
+        setInterval(() => {
+            this.broadcastGameState();
+        }, 1000 / UPDATE_RATE);
+
+        setInterval(() => {
+            this.checkHeartbeats();
+        }, 5000);
+    }
+
+    broadcastGameState() {
+        const state = {
+            players: Array.from(this.players.entries()).map(([id, player]) => ({
+                id,
+                position: player.data?.position,
+                health: player.data?.health,
+                isAlive: player.data?.isAlive
+            })),
+            timestamp: Date.now()
+        };
+
+        this.broadcast({
+            type: 'gameState',
+            state
+        });
+    }
+
+    checkHeartbeats() {
+        const now = Date.now();
+        this.players.forEach((player, id) => {
+            if (now - player.lastHeartbeat > 10000) {
+                this.handleDisconnect(id);
+            }
+        });
+    }
+
+    broadcastPlayersCount() {
+        this.broadcast({
+            type: 'playersCount',
+            count: this.players.size,
+            maxPlayers: this.maxPlayers,
+            minPlayersToStart: this.minPlayersToStart
+        });
     }
 }
 
-// Adicionar broadcast do tempo restante
-function broadcastTimeLeft(roomId) {
-    const room = rooms.get(roomId);
-    if (!room) return;
-
-    const timeLeft = Math.max(0, ROOM_TIMEOUT - (Date.now() - room.createdAt));
-    
-    broadcastToRoom(roomId, {
-        type: 'timeUpdate',
-        timeLeft: timeLeft,
-        playersInRoom: room.players.size,
-        maxPlayers: PLAYERS_PER_ROOM
-    });
+try {
+    const gameServer = new GameServer(3000);
+} catch (error) {
+    console.error('Erro ao criar servidor:', error);
 }
-
-// Melhorar broadcast de posições
-function broadcastPosition(roomId, playerId, position) {
-    const room = rooms.get(roomId);
-    if (!room) return;
-
-    broadcastToRoom(roomId, {
-        type: 'position',
-        id: playerId,
-        ...position,
-        timestamp: Date.now()
-    }, playerId);
-}
-
-// Iniciar servidor
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-});
