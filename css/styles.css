@@ -1858,3 +1858,38 @@ body::-webkit-scrollbar {
         display: flex !important;
     }
 }
+
+/* Controle Analógico Virtual */
+.virtual-joystick {
+    position: fixed;
+    bottom: 100px;
+    left: 100px;
+    width: 150px;
+    height: 150px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    touch-action: none;
+    display: none;
+    z-index: 1000;
+}
+
+.joystick-knob {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+/* Mostrar joystick apenas em dispositivos touch */
+@media (hover: none) and (pointer: coarse) {
+    .virtual-joystick {
+        display: block;
+    }
+}
