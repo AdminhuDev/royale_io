@@ -12,10 +12,10 @@ export class Player {
         this.maxAmmo = 100;
         this.score = 0;
         this.targetAngle = 0;
-        this.speed = 2.5;
-        this.baseSpeed = 2.5;
-        this.maxSpeed = 4;
-        this.acceleration = 0.25;
+        this.speed = 2.2;
+        this.baseSpeed = 2.2;
+        this.maxSpeed = 3.5;
+        this.acceleration = 0.2;
         this.deceleration = 0.15;
         this.velocity = { x: 0, y: 0 };
         this.input = { x: 0, y: 0 };
@@ -48,7 +48,7 @@ export class Player {
         this.supergum = {
             active: false,
             duration: 5000,
-            speedBoost: 1.4,
+            speedBoost: 1.5,
             startTime: 0
         };
         

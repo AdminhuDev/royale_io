@@ -4,13 +4,15 @@ export class BulletManager {
     constructor(game) {
         this.game = game;
         this.bullets = [];
-        this.bulletSpeed = 4;
+        this.bulletSpeed = 5.5;
         this.bulletSize = 5;
         this.bulletColor = '#0A84FF';
-        this.fireRate = 4;
+        this.fireRate = 5;
         this.fireInterval = 1000/this.fireRate;
         this.lastFireTime = 0;
         this.isFiring = false;
+        this.bulletDamage = 10;
+        this.bulletSpread = 0.1;
     }
 
     fireBullet(sourceX, sourceY, targetX, targetY, shooter, bulletColor) {
@@ -20,7 +22,7 @@ export class BulletManager {
         }
 
         const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
-        const spread = (Math.random() - 0.5) * 0.15;
+        const spread = (Math.random() - 0.5) * this.bulletSpread;
         const bulletX = sourceX + Math.cos(angle) * (shooter.size + this.bulletSize + 1);
         const bulletY = sourceY + Math.sin(angle) * (shooter.size + this.bulletSize + 1);
 
@@ -31,8 +33,9 @@ export class BulletManager {
             dy: Math.sin(angle + spread) * this.bulletSpeed,
             size: this.bulletSize,
             color: shooter === this.game.player ? bulletColor : '#ff4444',
-            damage: 10,
-            shooter
+            damage: this.bulletDamage,
+            shooter,
+            timestamp: now
         };
 
         this.bullets.push(bullet);
@@ -46,7 +49,10 @@ export class BulletManager {
     }
 
     update() {
+        const now = Date.now();
         this.bullets = this.bullets.filter(bullet => {
+            if (now - bullet.timestamp > 5000) return false;
+
             bullet.x += bullet.dx;
             bullet.y += bullet.dy;
 
@@ -60,19 +66,21 @@ export class BulletManager {
                 return false;
             }
 
+            let hitPlayer = false;
             this.game.otherPlayers.forEach(otherPlayer => {
-                if (otherPlayer.isAlive && bullet.shooter !== otherPlayer && 
+                if (!hitPlayer && otherPlayer.isAlive && bullet.shooter !== otherPlayer && 
                     !otherPlayer.shield.active && this.checkCollision(bullet, otherPlayer)) {
                     otherPlayer.takeDamage(bullet.damage);
                     if (bullet.shooter === this.game.player) {
                         this.game.player.addScore(10);
                     }
-                    return false;
+                    hitPlayer = true;
                 }
             });
+            if (hitPlayer) return false;
 
             for (const bot of this.game.botManager.bots) {
-                if (bot.isAlive && this.checkCollision(bullet, bot)) {
+                if (bot.isAlive && bullet.shooter !== bot && this.checkCollision(bullet, bot)) {
                     bot.takeDamage(bullet.damage);
                     if (bullet.shooter === this.game.player) {
                         this.game.player.addScore(10);
@@ -89,19 +97,14 @@ export class BulletManager {
         if (!target.isAlive) return false;
         const dx = bullet.x - target.x;
         const dy = bullet.y - target.y;
-        return Math.hypot(dx, dy) < (bullet.size + target.size);
+        const distance = Math.hypot(dx, dy);
+        const hitboxSize = target.size * 0.9;
+        return distance < (bullet.size + hitboxSize);
     }
 
     draw(ctx) {
         this.bullets.forEach(bullet => {
-            ctx.save();
-            ctx.shadowColor = bullet.color;
-            ctx.shadowBlur = 10;
-            ctx.beginPath();
-            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
-            ctx.fillStyle = bullet.color;
-            ctx.fill();
-            ctx.restore();
+            Effects.drawBulletEffect(ctx, bullet);
         });
     }
 

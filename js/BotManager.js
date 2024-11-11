@@ -60,9 +60,10 @@ class Bot {
         this.isAlive = true;
         this.ammo = 30;
         this.targetAngle = 0;
-        this.speed = 1.8;
-        this.baseSpeed = 1.8;
-        this.chaseSpeed = 2.2;
+        this.speed = 2.0;
+        this.baseSpeed = 2.0;
+        this.chaseSpeed = 2.4;
+        this.retreatSpeed = 2.6;
         this.moveDirection = Math.random() * Math.PI * 2;
         this.skin = skin;
         this.lastDamageTime = Date.now();
@@ -71,56 +72,64 @@ class Bot {
         this.state = 'wandering';
         this.targetChangeInterval = 2000;
         this.lastDirectionChange = Date.now();
+        this.stateChangeCooldown = 500;
+        this.lastStateChange = Date.now();
     }
 
     update(safeZoneConfig, bulletsArray, player, otherBots) {
         if (!this.isAlive) return;
 
+        const now = Date.now();
         const dxFromCenter = this.x - safeZoneConfig.centerX;
         const dyFromCenter = this.y - safeZoneConfig.centerY;
         const distanceFromCenter = Math.hypot(dxFromCenter, dyFromCenter);
         const angleToCenter = Math.atan2(dyFromCenter, dxFromCenter);
 
         let currentSpeed = this.baseSpeed;
+        let newState = this.state;
 
         if (distanceFromCenter > safeZoneConfig.currentRadius - this.safeZoneMargin) {
-            this.state = 'retreating';
+            newState = 'retreating';
+            currentSpeed = this.retreatSpeed;
             this.moveDirection = angleToCenter + Math.PI;
-            currentSpeed = this.chaseSpeed;
-        } else {
-            const now = Date.now();
-            
-            if (now - this.lastDirectionChange > this.targetChangeInterval && this.state === 'wandering') {
-                if (Math.random() < 0.8) {
-                    const safeAngle = Math.atan2(
-                        safeZoneConfig.centerY - this.y,
-                        safeZoneConfig.centerX - this.x
-                    ) + (Math.random() - 0.5) * Math.PI;
-                    this.moveDirection = safeAngle;
-                } else {
-                    this.moveDirection = Math.random() * Math.PI * 2;
-                }
-                this.lastDirectionChange = now;
-            }
+        } else if (player && player.isAlive) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const playerDistance = Math.hypot(dx, dy);
 
-            if (player && player.isAlive) {
-                const dx = player.x - this.x;
-                const dy = player.y - this.y;
-                const playerDistance = Math.hypot(dx, dy);
-
-                if (playerDistance < 300) {
-                    this.state = 'chasing';
-                    this.moveDirection = Math.atan2(dy, dx);
-                    currentSpeed = this.chaseSpeed;
-                } else {
-                    this.state = 'wandering';
-                    currentSpeed = this.baseSpeed;
-                }
+            if (playerDistance < 250) {
+                newState = 'chasing';
+                currentSpeed = this.chaseSpeed;
+                this.moveDirection = Math.atan2(dy, dx);
+            } else {
+                newState = 'wandering';
+                currentSpeed = this.baseSpeed;
             }
         }
 
-        const nextX = this.x + Math.cos(this.moveDirection) * currentSpeed;
-        const nextY = this.y + Math.sin(this.moveDirection) * currentSpeed;
+        if (newState !== this.state && now - this.lastStateChange > this.stateChangeCooldown) {
+            this.state = newState;
+            this.lastStateChange = now;
+        }
+
+        if (this.state === 'wandering' && now - this.lastDirectionChange > this.targetChangeInterval) {
+            if (Math.random() < 0.7) {
+                const safeAngle = Math.atan2(
+                    safeZoneConfig.centerY - this.y,
+                    safeZoneConfig.centerX - this.x
+                ) + (Math.random() - 0.5) * Math.PI * 0.5;
+                this.moveDirection = safeAngle;
+            } else {
+                this.moveDirection = Math.random() * Math.PI * 2;
+            }
+            this.lastDirectionChange = now;
+        }
+
+        const moveX = Math.cos(this.moveDirection) * currentSpeed;
+        const moveY = Math.sin(this.moveDirection) * currentSpeed;
+        
+        const nextX = this.x + moveX;
+        const nextY = this.y + moveY;
 
         const nextDistanceFromCenter = Math.hypot(
             nextX - safeZoneConfig.centerX,
@@ -130,6 +139,14 @@ class Bot {
         if (nextDistanceFromCenter < safeZoneConfig.currentRadius + this.safeZoneMargin) {
             this.x = nextX;
             this.y = nextY;
+        }
+
+        if (this.state === 'chasing' && player) {
+            const targetAngle = Math.atan2(player.y - this.y, player.x - this.x);
+            const angleDiff = targetAngle - this.targetAngle;
+            this.targetAngle += angleDiff * 0.1;
+        } else {
+            this.targetAngle = this.moveDirection;
         }
 
         if (distanceFromCenter > safeZoneConfig.currentRadius) {
