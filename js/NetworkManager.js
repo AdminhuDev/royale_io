@@ -122,41 +122,17 @@ export class NetworkManager {
             case 'gameState':
                 this.processGameState(data.state);
                 break;
-            
-            case 'pong':
-                this.updatePing(data.timestamp);
-                break;
 
             case 'shot':
                 this.handleShot(data);
                 break;
 
-            case 'playersCount':
-                this.currentPlayers = data.count;
-                this.maxPlayers = data.maxPlayers;
-                this.minPlayersToStart = data.minPlayersToStart;
-                
-                // Iniciar contagem apenas quando houver jogadores suficientes
-                if (this.currentPlayers >= this.minPlayersToStart && !this.game.countdownStarted) {
-                    this.send({
-                        type: 'readyToStart'
-                    });
-                }
-                
-                this.updateWaitingScreen();
+            case 'playerDamage':
+                this.handlePlayerDamage(data);
                 break;
 
-            case 'countdown':
-                if (this.game.countdownElement) {
-                    this.game.countdownElement.textContent = data.timeLeft;
-                }
-                if (data.timeLeft <= 0) {
-                    this.game.startGame();
-                }
-                break;
-
-            case 'gameStart':
-                this.game.startGame();
+            case 'playerDeath':
+                this.handlePlayerDeath(data);
                 break;
         }
     }
@@ -207,7 +183,8 @@ export class NetworkManager {
                 y: this.game.player.y,
                 angle: this.game.player.targetAngle,
                 health: this.game.player.health,
-                isAlive: this.game.player.isAlive
+                isAlive: this.game.player.isAlive,
+                timestamp: Date.now()
             });
         }
     }
@@ -295,24 +272,23 @@ export class NetworkManager {
                 type: 'shot',
                 ...shotData,
                 playerId: this.playerId,
-                timestamp: Date.now(),
                 position: {
                     x: this.game.player.x,
                     y: this.game.player.y,
                     angle: this.game.player.targetAngle
-                }
+                },
+                timestamp: Date.now()
             });
         }
     }
 
     handleShot(data) {
         if (data.playerId !== this.playerId) {
-            // Criar tiro de outro jogador
             const shooter = this.game.otherPlayers.get(data.playerId);
             if (shooter && this.game.bulletManager) {
                 this.game.bulletManager.fireBullet(
-                    data.x,
-                    data.y,
+                    data.position.x,
+                    data.position.y,
                     data.targetX,
                     data.targetY,
                     shooter,
@@ -322,19 +298,50 @@ export class NetworkManager {
         }
     }
 
+    handlePlayerDamage(data) {
+        if (data.targetId === this.playerId) {
+            this.game.player.takeDamage(data.damage);
+        } else {
+            const player = this.game.otherPlayers.get(data.targetId);
+            if (player) {
+                player.takeDamage(data.damage);
+            }
+        }
+    }
+
+    handlePlayerDeath(data) {
+        if (data.playerId === this.playerId) {
+            this.game.handlePlayerDeath();
+        } else {
+            const player = this.game.otherPlayers.get(data.playerId);
+            if (player) {
+                player.isAlive = false;
+                this.game.checkGameState();
+            }
+        }
+    }
+
     processGameState(state) {
         state.players.forEach(playerData => {
             if (playerData.id !== this.playerId) {
                 const player = this.game.otherPlayers.get(playerData.id);
                 if (player) {
-                    // Atualizar estado do jogador
+                    // Interpolar posição
+                    const timestamp = Date.now();
+                    player.interpolationBuffer.push({
+                        x: playerData.position.x,
+                        y: playerData.position.y,
+                        angle: playerData.position.angle,
+                        timestamp: timestamp
+                    });
+
+                    // Manter apenas os estados mais recentes
+                    while (player.interpolationBuffer.length > 10) {
+                        player.interpolationBuffer.shift();
+                    }
+
                     player.health = playerData.health;
                     player.isAlive = playerData.isAlive;
-                    if (playerData.position) {
-                        player.x = playerData.position.x;
-                        player.y = playerData.position.y;
-                        player.targetAngle = playerData.position.angle;
-                    }
                 }
             }
         });
