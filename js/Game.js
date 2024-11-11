@@ -169,6 +169,24 @@ export class Game {
         this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
         this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
         window.addEventListener('keydown', this.boundHandleKeyDown);
+
+        // Adicionar controle de tela cheia
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        if (fullscreenButton) {
+            fullscreenButton.addEventListener('click', () => {
+                this.toggleFullscreen();
+            });
+        }
+    }
+
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Erro ao tentar entrar em tela cheia: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
     }
 
     gameLoop() {
@@ -827,6 +845,7 @@ export class Game {
 
         const joystick = document.querySelector('.virtual-joystick');
         const knob = document.querySelector('.joystick-knob');
+        const shootButton = document.getElementById('shoot-button');
         
         if (!joystick || !knob) return;
 
@@ -907,7 +926,6 @@ export class Game {
         joystick.addEventListener('touchcancel', resetJoystick);
 
         // Botão de tiro separado
-        const shootButton = document.getElementById('shoot-button');
         if (shootButton) {
             shootButton.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -919,5 +937,20 @@ export class Game {
                 this.firing = false;
             });
         }
+
+        // Atualizar posição do joystick e botão de tiro ao mudar orientação
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                this.setupCanvas();
+                if (document.fullscreenElement) {
+                    joystick.style.bottom = '15vh';
+                    joystick.style.right = '5vw';
+                    if (shootButton) {
+                        shootButton.style.bottom = '15vh';
+                        shootButton.style.left = '5vw';
+                    }
+                }
+            }, 100);
+        });
     }
 }
