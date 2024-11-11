@@ -169,24 +169,6 @@ export class Game {
         this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
         this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
         window.addEventListener('keydown', this.boundHandleKeyDown);
-
-        // Adicionar controle de tela cheia
-        const fullscreenButton = document.getElementById('fullscreen-button');
-        if (fullscreenButton) {
-            fullscreenButton.addEventListener('click', () => {
-                this.toggleFullscreen();
-            });
-        }
-    }
-
-    toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error(`Erro ao tentar entrar em tela cheia: ${err.message}`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
     }
 
     gameLoop() {
@@ -843,114 +825,46 @@ export class Game {
     setupTouchControls() {
         if (!this.isTouchDevice) return;
 
-        const joystick = document.querySelector('.virtual-joystick');
-        const knob = document.querySelector('.joystick-knob');
-        const shootButton = document.getElementById('shoot-button');
-        
-        if (!joystick || !knob) return;
-
         let isDragging = false;
-        let startX, startY;
-        let currentX, currentY;
-        const joystickRadius = 75; // Metade do tamanho do joystick
-        const deadzone = 10; // Zona morta do joystick
+        let lastTouch = null;
 
-        const updateJoystickPosition = (x, y) => {
-            const rect = joystick.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            
-            // Calcular distância do centro
-            const dx = x - centerX;
-            const dy = y - centerY;
-            const distance = Math.hypot(dx, dy);
-            
-            // Limitar ao raio do joystick
-            const angle = Math.atan2(dy, dx);
-            const limitedDistance = Math.min(distance, joystickRadius);
-            
-            // Calcular nova posição
-            const knobX = Math.cos(angle) * limitedDistance;
-            const knobY = Math.sin(angle) * limitedDistance;
-            
-            // Atualizar posição do knob
-            knob.style.transform = `translate(${knobX}px, ${knobY}px)`;
-            
-            // Atualizar movimento do jogador
-            if (this.player && distance > deadzone) {
-                const moveX = (dx / joystickRadius) * this.player.speed;
-                const moveY = (dy / joystickRadius) * this.player.speed;
-                
-                this.player.velocity.x = moveX;
-                this.player.velocity.y = moveY;
-                
-                // Atualizar ângulo do jogador
-                this.player.targetAngle = angle;
-            } else if (this.player) {
-                this.player.velocity.x = 0;
-                this.player.velocity.y = 0;
-            }
-        };
-
-        joystick.addEventListener('touchstart', (e) => {
+        this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            const touch = e.touches[0];
             isDragging = true;
-            const touch = e.touches[0];
-            startX = touch.clientX;
-            startY = touch.clientY;
-            currentX = startX;
-            currentY = startY;
-            updateJoystickPosition(currentX, currentY);
+            this.touchStartPos = {
+                x: touch.clientX,
+                y: touch.clientY
+            };
+            lastTouch = touch;
+
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse = {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
         });
 
-        joystick.addEventListener('touchmove', (e) => {
+        this.canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            if (!isDragging) return;
-            
             const touch = e.touches[0];
-            currentX = touch.clientX;
-            currentY = touch.clientY;
-            updateJoystickPosition(currentX, currentY);
+            lastTouch = touch;
+            
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouse = {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
         });
 
-        const resetJoystick = () => {
+        this.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
             isDragging = false;
-            knob.style.transform = 'translate(-50%, -50%)';
+            lastTouch = null;
             if (this.player) {
-                this.player.velocity.x = 0;
-                this.player.velocity.y = 0;
+                this.player.velocity.x *= 0.5;
+                this.player.velocity.y *= 0.5;
             }
-        };
-
-        joystick.addEventListener('touchend', resetJoystick);
-        joystick.addEventListener('touchcancel', resetJoystick);
-
-        // Botão de tiro separado
-        if (shootButton) {
-            shootButton.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                this.firing = true;
-            });
-
-            shootButton.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                this.firing = false;
-            });
-        }
-
-        // Atualizar posição do joystick e botão de tiro ao mudar orientação
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                this.setupCanvas();
-                if (document.fullscreenElement) {
-                    joystick.style.bottom = '15vh';
-                    joystick.style.right = '5vw';
-                    if (shootButton) {
-                        shootButton.style.bottom = '15vh';
-                        shootButton.style.left = '5vw';
-                    }
-                }
-            }, 100);
         });
     }
 }

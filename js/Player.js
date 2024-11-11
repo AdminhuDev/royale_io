@@ -304,24 +304,29 @@ export class Player {
         this.shield.active = true;
         this.shield.startTime = Date.now();
         
-        // Usar arrow functions para manter o contexto 'this'
-        const shieldTimeout = setTimeout(() => {
+        // Limpar timers existentes
+        if (this.shield.timeoutId) {
+            clearTimeout(this.shield.timeoutId);
+        }
+        if (this.shield.cooldownTimeoutId) {
+            clearTimeout(this.shield.cooldownTimeoutId);
+        }
+        
+        // Timer para desativar o escudo
+        this.shield.timeoutId = setTimeout(() => {
             if (this.shield) {
                 this.shield.active = false;
                 this.shield.cooldown = true;
                 this.shield.cooldownStartTime = Date.now();
                 
-                const cooldownTimeout = setTimeout(() => {
+                // Timer para remover o cooldown
+                this.shield.cooldownTimeoutId = setTimeout(() => {
                     if (this.shield) {
                         this.shield.cooldown = false;
                     }
                 }, this.shield.cooldownTime);
-                
-                this.shield.cooldownTimeoutId = cooldownTimeout;
             }
         }, this.shield.duration);
-        
-        this.shield.timeoutId = shieldTimeout;
         
         return true;
     }
@@ -334,7 +339,8 @@ export class Player {
         this.medkits.startTime = Date.now();
         this.medkits.count--;
         
-        let healInterval = setInterval(() => {
+        // Curar gradualmente
+        const healInterval = setInterval(() => {
             if (this.medkits?.active) {
                 this.health = Math.min(100, this.health + this.medkits.healRate);
                 if (this.game?.ui) {
@@ -343,13 +349,15 @@ export class Player {
             }
         }, 100);
         
+        // Timer para desativar a cura
         setTimeout(() => {
+            clearInterval(healInterval);
             if (this.medkits) {
-                clearInterval(healInterval);
                 this.medkits.active = false;
                 this.medkits.cooldown = true;
                 this.medkits.cooldownStartTime = Date.now();
                 
+                // Timer para remover o cooldown
                 setTimeout(() => {
                     if (this.medkits) {
                         this.medkits.cooldown = false;
@@ -396,30 +404,18 @@ export class Player {
     }
 
     destroy() {
-        // Limpar todos os timers antes de destruir
+        // Limpar timers
         if (this.shield) {
-            if (this.shield.timeoutId) clearTimeout(this.shield.timeoutId);
-            if (this.shield.cooldownTimeoutId) clearTimeout(this.shield.cooldownTimeoutId);
-        }
-        
-        if (this.medkits) {
-            if (this.medkits.healInterval) clearInterval(this.medkits.healInterval);
-            if (this.medkits.cooldownTimeoutId) clearTimeout(this.medkits.cooldownTimeoutId);
-        }
-        
-        if (this.supergum?.active) {
-            this.supergum.active = false;
-            this.speed = this.baseSpeed;
-        }
-        
-        if (this.laser?.active) {
-            this.laser.active = false;
-            if (this.game?.bulletManager) {
-                this.game.bulletManager.bulletDamage = 10;
+            if (this.shield.timeoutId) {
+                clearTimeout(this.shield.timeoutId);
+            }
+            if (this.shield.cooldownTimeoutId) {
+                clearTimeout(this.shield.cooldownTimeoutId);
             }
         }
 
-        // Limpar referências
+        // Limpar estados
+        this.isAlive = false;
         this.shield = null;
         this.medkits = null;
         this.supergum = null;
@@ -427,6 +423,7 @@ export class Player {
         this.game = null;
         this.skin = null;
         this.trailPositions = [];
+        this.interpolationBuffer = [];
     }
 
     updateAmmo(amount) {
