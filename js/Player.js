@@ -20,7 +20,9 @@ export class Player {
             duration: 5000,
             cooldownTime: 10000,
             startTime: 0,
-            cooldownStartTime: 0
+            cooldownStartTime: 0,
+            timeoutId: null,
+            cooldownTimeoutId: null
         };
 
         this.medkits = {
@@ -266,16 +268,25 @@ export class Player {
             this.shield.active = true;
             this.shield.startTime = Date.now();
             
-            // Iniciar cooldown quando o escudo terminar
-            setTimeout(() => {
-                this.shield.active = false;
-                this.shield.cooldown = true;
-                this.shield.cooldownStartTime = Date.now();
-                
-                // Remover cooldown após o tempo
-                setTimeout(() => {
-                    this.shield.cooldown = false;
-                }, this.shield.cooldownTime);
+            if (this.shield.timeoutId) {
+                clearTimeout(this.shield.timeoutId);
+            }
+            if (this.shield.cooldownTimeoutId) {
+                clearTimeout(this.shield.cooldownTimeoutId);
+            }
+            
+            this.shield.timeoutId = setTimeout(() => {
+                if (this.shield) {
+                    this.shield.active = false;
+                    this.shield.cooldown = true;
+                    this.shield.cooldownStartTime = Date.now();
+                    
+                    this.shield.cooldownTimeoutId = setTimeout(() => {
+                        if (this.shield) {
+                            this.shield.cooldown = false;
+                        }
+                    }, this.shield.cooldownTime);
+                }
             }, this.shield.duration);
             
             return true;
@@ -361,6 +372,15 @@ export class Player {
             this.laser.active = false;
             if (this.game?.bulletManager) {
                 this.game.bulletManager.bulletDamage = 10;
+            }
+        }
+
+        if (this.shield) {
+            if (this.shield.timeoutId) {
+                clearTimeout(this.shield.timeoutId);
+            }
+            if (this.shield.cooldownTimeoutId) {
+                clearTimeout(this.shield.cooldownTimeoutId);
             }
         }
 
