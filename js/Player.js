@@ -299,70 +299,66 @@ export class Player {
     }
 
     activateShield() {
-        if (!this.shield.active && !this.shield.cooldown) {
-            this.shield.active = true;
-            this.shield.startTime = Date.now();
-            
-            if (this.shield.timeoutId) {
-                clearTimeout(this.shield.timeoutId);
+        if (!this.shield || this.shield.active || this.shield.cooldown) return false;
+
+        this.shield.active = true;
+        this.shield.startTime = Date.now();
+        
+        // Usar arrow functions para manter o contexto 'this'
+        const shieldTimeout = setTimeout(() => {
+            if (this.shield) {
+                this.shield.active = false;
+                this.shield.cooldown = true;
+                this.shield.cooldownStartTime = Date.now();
+                
+                const cooldownTimeout = setTimeout(() => {
+                    if (this.shield) {
+                        this.shield.cooldown = false;
+                    }
+                }, this.shield.cooldownTime);
+                
+                this.shield.cooldownTimeoutId = cooldownTimeout;
             }
-            if (this.shield.cooldownTimeoutId) {
-                clearTimeout(this.shield.cooldownTimeoutId);
-            }
-            
-            this.shield.timeoutId = setTimeout(() => {
-                if (this.shield) {
-                    this.shield.active = false;
-                    this.shield.cooldown = true;
-                    this.shield.cooldownStartTime = Date.now();
-                    
-                    this.shield.cooldownTimeoutId = setTimeout(() => {
-                        if (this.shield) {
-                            this.shield.cooldown = false;
-                        }
-                    }, this.shield.cooldownTime);
-                }
-            }, this.shield.duration);
-            
-            return true;
-        }
-        return false;
+        }, this.shield.duration);
+        
+        this.shield.timeoutId = shieldTimeout;
+        
+        return true;
     }
 
     activateHealing() {
-        if (!this.medkits.active && !this.medkits.cooldown && 
-            this.medkits.count > 0 && this.health < 100) {
-            
-            this.medkits.active = true;
-            this.medkits.startTime = Date.now();
-            this.medkits.count--;
-            
-            // Curar gradualmente
-            const healInterval = setInterval(() => {
-                if (this.medkits.active) {
-                    this.health = Math.min(100, this.health + this.medkits.healRate);
-                    if (this.game?.ui) {
-                        this.game.ui.updateHealth(this.health);
-                    }
+        if (!this.medkits || this.medkits.active || this.medkits.cooldown || 
+            this.medkits.count <= 0 || this.health >= 100) return false;
+        
+        this.medkits.active = true;
+        this.medkits.startTime = Date.now();
+        this.medkits.count--;
+        
+        let healInterval = setInterval(() => {
+            if (this.medkits?.active) {
+                this.health = Math.min(100, this.health + this.medkits.healRate);
+                if (this.game?.ui) {
+                    this.game.ui.updateHealth(this.health);
                 }
-            }, 100);
-            
-            // Parar cura e iniciar cooldown
-            setTimeout(() => {
+            }
+        }, 100);
+        
+        setTimeout(() => {
+            if (this.medkits) {
                 clearInterval(healInterval);
                 this.medkits.active = false;
                 this.medkits.cooldown = true;
                 this.medkits.cooldownStartTime = Date.now();
                 
-                // Remover cooldown após o tempo
                 setTimeout(() => {
-                    this.medkits.cooldown = false;
+                    if (this.medkits) {
+                        this.medkits.cooldown = false;
+                    }
                 }, this.medkits.cooldownTime);
-            }, this.medkits.duration);
-            
-            return true;
-        }
-        return false;
+            }
+        }, this.medkits.duration);
+        
+        return true;
     }
 
     activateSupergum() {
@@ -400,9 +396,20 @@ export class Player {
     }
 
     destroy() {
+        // Limpar todos os timers antes de destruir
+        if (this.shield) {
+            if (this.shield.timeoutId) clearTimeout(this.shield.timeoutId);
+            if (this.shield.cooldownTimeoutId) clearTimeout(this.shield.cooldownTimeoutId);
+        }
+        
+        if (this.medkits) {
+            if (this.medkits.healInterval) clearInterval(this.medkits.healInterval);
+            if (this.medkits.cooldownTimeoutId) clearTimeout(this.medkits.cooldownTimeoutId);
+        }
+        
         if (this.supergum?.active) {
             this.supergum.active = false;
-            this.speed = 3;
+            this.speed = this.baseSpeed;
         }
         
         if (this.laser?.active) {
@@ -412,15 +419,7 @@ export class Player {
             }
         }
 
-        if (this.shield) {
-            if (this.shield.timeoutId) {
-                clearTimeout(this.shield.timeoutId);
-            }
-            if (this.shield.cooldownTimeoutId) {
-                clearTimeout(this.shield.cooldownTimeoutId);
-            }
-        }
-
+        // Limpar referências
         this.shield = null;
         this.medkits = null;
         this.supergum = null;
