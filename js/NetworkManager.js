@@ -9,12 +9,18 @@ export class NetworkManager {
         this.playerId = null;
         this.roomId = null;
         this.players = new Map();
-        this.matchmakingState = 'idle'; // idle, searching, inRoom
+        this.matchmakingState = 'idle';
+        
+        // URL dinâmica baseada no ambiente
         this.serverUrl = window.location.hostname === 'localhost' 
             ? 'ws://localhost:3000'
             : `wss://${window.location.hostname}`;
+        
         this.lastPing = 0;
         this.pingInterval = null;
+        this.lastUpdateTime = Date.now();
+        this.updateRate = 50; // Atualizar a cada 50ms
+        this.interpolationDelay = 100; // 100ms de delay para interpolação
         
         this.setupConnection();
     }
@@ -26,6 +32,7 @@ export class NetworkManager {
             Logger.info('Conectado ao servidor');
             this.startPing();
             this.joinRoom();
+            this.startUpdateLoop();
         };
 
         this.socket.onmessage = (event) => {
@@ -37,11 +44,14 @@ export class NetworkManager {
             Logger.info('Desconectado do servidor');
             this.handleDisconnect();
         };
+    }
 
-        this.socket.onerror = (error) => {
-            Logger.error('Erro na conexão WebSocket:', error);
-            this.handleDisconnect();
-        };
+    startUpdateLoop() {
+        setInterval(() => {
+            if (this.game?.player?.isAlive) {
+                this.updatePosition();
+            }
+        }, this.updateRate);
     }
 
     startPing() {
@@ -168,16 +178,45 @@ export class NetworkManager {
         if (data.id !== this.playerId) {
             const player = this.players.get(data.id);
             if (player) {
-                // Interpolação suave
-                const targetX = data.x;
-                const targetY = data.y;
-                const dx = targetX - player.x;
-                const dy = targetY - player.y;
-                
-                player.x += dx * 0.2; // Suavização do movimento
-                player.y += dy * 0.2;
-                player.targetAngle = data.angle;
+                // Adicionar timestamp para interpolação
+                player.positionBuffer = player.positionBuffer || [];
+                player.positionBuffer.push({
+                    x: data.x,
+                    y: data.y,
+                    angle: data.angle,
+                    timestamp: Date.now()
+                });
+
+                // Manter apenas os últimos 10 estados
+                if (player.positionBuffer.length > 10) {
+                    player.positionBuffer.shift();
+                }
+
+                this.interpolatePlayerPosition(player);
             }
+        }
+    }
+
+    interpolatePlayerPosition(player) {
+        if (!player.positionBuffer || player.positionBuffer.length < 2) return;
+
+        const now = Date.now() - this.interpolationDelay;
+        
+        // Encontrar os dois estados mais próximos do tempo atual
+        while (player.positionBuffer.length >= 2 && 
+               player.positionBuffer[1].timestamp <= now) {
+            player.positionBuffer.shift();
+        }
+
+        if (player.positionBuffer.length >= 2) {
+            const pos0 = player.positionBuffer[0];
+            const pos1 = player.positionBuffer[1];
+            const t = (now - pos0.timestamp) / (pos1.timestamp - pos0.timestamp);
+
+            // Interpolação linear
+            player.x = pos0.x + (pos1.x - pos0.x) * t;
+            player.y = pos0.y + (pos1.y - pos0.y) * t;
+            player.targetAngle = pos0.angle + (pos1.angle - pos0.angle) * t;
         }
     }
 
@@ -240,13 +279,14 @@ export class NetworkManager {
     }
 
     updatePosition() {
-        if (!this.game?.player) return;
-        
+        if (!this.game?.player?.isAlive) return;
+
         this.send({
             type: 'position',
             x: this.game.player.x,
             y: this.game.player.y,
-            angle: this.game.player.targetAngle
+            angle: this.game.player.targetAngle,
+            timestamp: Date.now()
         });
     }
 
@@ -356,6 +396,11 @@ export class NetworkManager {
         if (this.pingInterval) {
             clearInterval(this.pingInterval);
             this.pingInterval = null;
+        }
+
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
         }
 
         if (this.socket) {
