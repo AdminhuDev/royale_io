@@ -188,19 +188,14 @@ export class Game {
 
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
         this.ctx.save();
 
-        const target = this.spectatorMode ? this.spectatingBot : this.player;
-        if (target) {
-            const cameraX = target.x - this.canvas.width/2;
-            const cameraY = target.y - this.canvas.height/2;
-            this.ctx.translate(-cameraX, -cameraY);
-        }
+        const cameraX = this.player.x - this.canvas.width/2;
+        const cameraY = this.player.y - this.canvas.height/2;
+        this.ctx.translate(-cameraX, -cameraY);
 
         this.drawGameElements();
 
-        // Desenhar outros jogadores
         this.otherPlayers.forEach(player => {
             if (player.isAlive) {
                 player.draw(this.ctx);
@@ -209,7 +204,7 @@ export class Game {
 
         this.ctx.restore();
 
-        if (!this.spectatorMode && this.player.isAlive) {
+        if (this.player.isAlive) {
             this.drawCrosshair();
         }
     }
@@ -220,7 +215,7 @@ export class Game {
         this.lootManager.draw(this.ctx);
         this.botManager.draw(this.ctx);
         
-        if (this.player.isAlive && !this.spectatorMode) {
+        if (this.player.isAlive) {
             this.player.draw(this.ctx);
         }
     }
@@ -440,19 +435,19 @@ export class Game {
             }
         });
         
-        // Limpar arrays
+        // Limpar arrays e timers
         this.bullets = [];
         this.loots = [];
         this.otherPlayers.clear();
         
-        // Limpar canvas
-        if (this.ctx && this.canvas) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-
         if (this.fpsUpdateInterval) {
             clearInterval(this.fpsUpdateInterval);
             this.fpsUpdateInterval = null;
+        }
+
+        // Limpar canvas
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         }
     }
 
@@ -515,37 +510,6 @@ export class Game {
         if (this.ctx && this.canvas) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         }
-    }
-
-    showGameOver(message, canSpectate = false) {
-        if (this.gameEnded && !this.spectatorMode) {
-            if (this.network) {
-                this.network.handleGameEnd();
-            }
-            
-            if (canSpectate && this.botManager.bots.filter(bot => bot.isAlive).length > 1) {
-                this.ui.showSpectateOptions(message);
-            } else {
-                this.showFinalScreen(message);
-            }
-        }
-    }
-
-    showFinalScreen(message) {
-        const startScreen = document.getElementById('start-screen');
-        const startScreenScore = document.getElementById('start-screen-score');
-        
-        if (startScreen && startScreenScore) {
-            startScreen.style.display = 'flex';
-            startScreenScore.textContent = `Pontuação: ${this.player.score}`;
-            startScreenScore.classList.add('highlight-score');
-        }
-
-        this.canvas.style.display = 'none';
-        const ui = document.getElementById('ui');
-        if (ui) ui.style.display = 'none';
-
-        this.ui.showTemporaryMessage(message);
     }
 
     handleResize() {
@@ -670,13 +634,6 @@ export class Game {
             player.y = position.y;
             player.targetAngle = position.angle;
         }
-    }
-
-    showStartScreen() {
-        if (this.network) {
-            this.network.handleGameEnd();
-        }
-        // ... resto do código ...
     }
 
     startGame() {
