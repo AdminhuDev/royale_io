@@ -12,8 +12,15 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Servir arquivos estáticos
-app.use(express.static('./'));
+// Configurar MIME types
+app.use(express.static('./', {
+    setHeaders: (res, path) => {
+        // Definir MIME type correto para arquivos CSS
+        if (path.endsWith('.css')) {
+            res.setHeader('Content-Type', 'text/css');
+        }
+    }
+}));
 
 // Rota principal
 app.get('/', (req, res) => {
