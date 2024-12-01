@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStats();
 
     const startScreen = document.getElementById('start-screen');
+    const waitingScreen = document.getElementById('waiting-screen');
     const gameCanvas = document.getElementById('gameCanvas');
     const gameUI = document.getElementById('game-ui');
     const startButton = document.getElementById('start-game-button');
@@ -32,14 +33,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeTutorialButton = document.getElementById('close-tutorial');
     const playAgainButton = document.getElementById('play-again');
     const backToMenuButton = document.getElementById('back-to-menu');
+    const countdownElement = document.getElementById('countdown');
     
     let game = null;
 
     // Carregar nome do jogador salvo
     playerNameInput.value = localStorage.getItem('playerName') || '';
 
-    function startGame() {
+    function startCountdown() {
+        let count = 5; // 5 segundos de contagem regressiva
+        countdownElement.textContent = count;
+        
+        const interval = setInterval(() => {
+            count--;
+            countdownElement.textContent = count;
+            
+            if (count <= 0) {
+                clearInterval(interval);
+                startGame();
+            }
+        }, 1000);
+    }
+
+    function showWaitingScreen() {
+        // Destruir jogo anterior se existir
+        if (game) {
+            game.destroy();
+            game = null;
+        }
+
+        // Esconder todas as outras telas
         startScreen.style.display = 'none';
+        gameCanvas.style.display = 'none';
+        gameUI.style.display = 'none';
+        document.getElementById('game-over').style.display = 'none';
+        
+        // Mostrar tela de espera
+        waitingScreen.style.display = 'flex';
+        startCountdown();
+    }
+
+    function startGame() {
+        // Destruir jogo anterior se existir
+        if (game) {
+            game.destroy();
+            game = null;
+        }
+
+        // Esconder todas as outras telas
+        startScreen.style.display = 'none';
+        waitingScreen.style.display = 'none';
+        document.getElementById('game-over').style.display = 'none';
+        
+        // Mostrar tela do jogo
         gameCanvas.style.display = 'block';
         gameUI.style.display = 'block';
         
@@ -48,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('playerName', playerNameInput.value.trim());
         }
 
+        // Criar novo jogo
         game = new Game();
     }
 
@@ -60,14 +107,27 @@ document.addEventListener('DOMContentLoaded', () => {
         // Atualizar estatísticas ao voltar ao menu
         updateStats();
         
+        // Esconder todas as outras telas
         gameCanvas.style.display = 'none';
         gameUI.style.display = 'none';
+        waitingScreen.style.display = 'none';
         document.getElementById('game-over').style.display = 'none';
+        
+        // Mostrar menu inicial
         startScreen.style.display = 'flex';
     }
 
-    startButton.addEventListener('click', startGame);
-    playAgainButton.addEventListener('click', startGame);
+    startButton.addEventListener('click', () => {
+        // Verificar se o nome foi preenchido
+        if (!playerNameInput.value.trim()) {
+            playerNameInput.style.borderColor = 'red';
+            return;
+        }
+        playerNameInput.style.borderColor = '';
+        showWaitingScreen();
+    });
+
+    playAgainButton.addEventListener('click', showWaitingScreen);
     backToMenuButton.addEventListener('click', backToMenu);
 
     tutorialButton.addEventListener('click', () => {

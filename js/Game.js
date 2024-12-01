@@ -82,7 +82,9 @@ export class Game {
         this.lastScreenX = 0;
         this.lastScreenY = 0;
 
-        this.canvas.addEventListener('mousemove', (e) => {
+        const mouseMoveHandler = (e) => {
+            if (this.isGameOver || !this.camera) return;
+
             const rect = this.canvas.getBoundingClientRect();
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
@@ -93,17 +95,27 @@ export class Game {
             
             // Atualizar coordenadas do mundo
             this.updateMouseWorldPosition();
-        });
+        };
 
-        this.canvas.addEventListener('click', (e) => {
-            if (this.localPlayer && this.localPlayer.health > 0) {
+        const clickHandler = (e) => {
+            if (this.localPlayer && this.localPlayer.health > 0 && !this.isGameOver) {
                 this.shoot();
             }
-        });
+        };
+
+        this.canvas.addEventListener('mousemove', mouseMoveHandler);
+        this.canvas.addEventListener('click', clickHandler);
+
+        // Armazenar referências para remover depois
+        this.eventHandlers = {
+            mousemove: mouseMoveHandler,
+            click: clickHandler
+        };
     }
 
-    // Novo método para atualizar a posição do mouse no mundo
     updateMouseWorldPosition() {
+        if (!this.camera || this.isGameOver) return;
+        
         const worldPos = this.camera.screenToWorld(this.lastScreenX, this.lastScreenY);
         this.mouseX = worldPos.x;
         this.mouseY = worldPos.y;
@@ -641,13 +653,34 @@ export class Game {
 
     destroy() {
         this.isGameOver = true;
+        this.gameState = 'ended';
+        
+        // Remover event listeners
+        if (this.eventHandlers) {
+            this.canvas.removeEventListener('mousemove', this.eventHandlers.mousemove);
+            this.canvas.removeEventListener('click', this.eventHandlers.click);
+            this.eventHandlers = null;
+        }
+
+        // Cancelar loop do jogo
         if (this.gameLoopId) {
             cancelAnimationFrame(this.gameLoopId);
             this.gameLoopId = null;
         }
+
+        // Desconectar do servidor
         if (this.networkManager) {
             this.networkManager.disconnect();
+            this.networkManager = null;
         }
+
+        // Limpar referências
+        this.players.clear();
+        this.bots.clear();
+        this.bullets = [];
+        this.localPlayer = null;
+        this.camera = null;
+        this.lootManager = null;
     }
 
     renderWaitingScreen() {

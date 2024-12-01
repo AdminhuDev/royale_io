@@ -4,10 +4,23 @@ export class NetworkManager {
         this.socket = null;
         this.connected = false;
         this.playerId = null;
+        this.reconnectTimeout = null;
         this.connect();
     }
 
     connect() {
+        // Limpar timeout de reconexão anterior se existir
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // Limpar socket anterior se existir
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
+
         const serverUrl = window.location.hostname === 'localhost' 
             ? 'ws://localhost:3000'
             : `wss://${window.location.host}`;
@@ -23,9 +36,12 @@ export class NetworkManager {
         this.socket.onclose = () => {
             console.log('Desconectado do servidor');
             this.connected = false;
+            this.playerId = null;
             
-            // Tentar reconectar após 5 segundos
-            setTimeout(() => this.connect(), 5000);
+            // Tentar reconectar apenas se o jogo não estiver terminado
+            if (!this.game.isGameOver) {
+                this.reconnectTimeout = setTimeout(() => this.connect(), 5000);
+            }
         };
 
         this.socket.onerror = (error) => {
@@ -181,8 +197,28 @@ export class NetworkManager {
     }
 
     disconnect() {
-        if (this.socket) {
-            this.socket.close();
+        // Limpar timeout de reconexão
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
         }
+
+        // Fechar socket
+        if (this.socket) {
+            // Remover todos os event listeners
+            this.socket.onopen = null;
+            this.socket.onclose = null;
+            this.socket.onerror = null;
+            this.socket.onmessage = null;
+
+            // Fechar conexão
+            if (this.socket.readyState === WebSocket.OPEN) {
+                this.socket.close();
+            }
+            this.socket = null;
+        }
+
+        this.connected = false;
+        this.playerId = null;
     }
 }
