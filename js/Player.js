@@ -9,6 +9,16 @@ export class Player {
         this.ammo = 30;
         this.score = 0;
         this.kills = 0;
+
+        // Sistema de escudo
+        this.shield = 100;
+        this.shieldActive = false;
+        this.shieldCooldown = 0;
+        this.shieldCooldownMax = 300; // 5 segundos (60 fps * 5)
+        this.shieldDuration = 180; // 3 segundos
+        this.shieldTimer = 0;
+        this.shieldRegenRate = 0.2; // Taxa de regeneração do escudo
+        this.shieldConsumptionRate = 1; // Taxa de consumo do escudo quando ativo
     }
 
     move(targetX, targetY, worldWidth, worldHeight) {
@@ -59,8 +69,62 @@ export class Player {
         return bullet;
     }
 
+    activateShield() {
+        if (this.shield > 0 && this.shieldCooldown <= 0 && !this.shieldActive) {
+            this.shieldActive = true;
+            this.shieldTimer = this.shieldDuration;
+            return true;
+        }
+        return false;
+    }
+
+    updateShield() {
+        // Atualiza o cooldown do escudo
+        if (this.shieldCooldown > 0) {
+            this.shieldCooldown--;
+        }
+
+        // Se o escudo estiver ativo
+        if (this.shieldActive) {
+            // Consome o escudo
+            this.shield = Math.max(0, this.shield - this.shieldConsumptionRate);
+            
+            // Desativa o escudo se acabar a energia
+            if (this.shield <= 0) {
+                this.shieldActive = false;
+                this.shieldCooldown = this.shieldCooldownMax;
+            }
+
+            this.shieldTimer--;
+            if (this.shieldTimer <= 0) {
+                this.shieldActive = false;
+                this.shieldCooldown = this.shieldCooldownMax;
+            }
+        }
+
+        // Regenera o escudo quando não estiver ativo e não estiver em cooldown
+        if (!this.shieldActive && this.shieldCooldown <= 0 && this.shield < 100) {
+            this.shield = Math.min(100, this.shield + this.shieldRegenRate);
+        }
+    }
+
     takeDamage(damage) {
-        this.health -= damage;
+        if (this.shieldActive) {
+            // Reduzir dano pelo escudo
+            const shieldDamage = damage * 0.5; // Escudo absorve 50% do dano
+            this.shield -= shieldDamage;
+            
+            if (this.shield <= 0) {
+                this.shield = 0;
+                this.shieldActive = false;
+                this.shieldCooldown = this.shieldCooldownMax;
+                // Dano restante vai para a vida
+                this.health -= damage * 0.5;
+            }
+        } else {
+            this.health -= damage;
+        }
+
         if (this.health < 0) this.health = 0;
         return this.health <= 0;
     }
@@ -74,6 +138,16 @@ export class Player {
     }
 
     render(ctx, mouseX, mouseY, isLocal = false) {
+        // Efeito do escudo
+        if (this.shieldActive) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(33, 150, 243, ${0.5 + Math.sin(Date.now() * 0.01) * 0.2})`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
         // Corpo do jogador
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -112,9 +186,30 @@ export class Player {
             healthBarHeight
         );
 
+        // Barra de escudo
+        if (this.shield > 0) {
+            const shieldBarY = this.y - this.radius - 25;
+            const shieldPercentage = this.shield / 100;
+            
+            ctx.fillStyle = '#333';
+            ctx.fillRect(
+                this.x - healthBarWidth/2,
+                shieldBarY,
+                healthBarWidth,
+                healthBarHeight
+            );
+            
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(
+                this.x - healthBarWidth/2,
+                shieldBarY,
+                healthBarWidth * shieldPercentage,
+                healthBarHeight
+            );
+        }
+
         // Linha de mira (apenas para jogador local)
         if (isLocal) {
-            // Linha principal
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(mouseX, mouseY);

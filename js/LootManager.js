@@ -30,7 +30,15 @@ export class LootManager {
             if (this.game.localPlayer) {
                 if (loot.isColliding(this.game.localPlayer)) {
                     if (loot.type === 'medkit') {
-                        this.game.localPlayer.heal(50);
+                        // Só cura se a vida não estiver cheia
+                        if (this.game.localPlayer.health < 100) {
+                            const curaTotal = 50;
+                            const curaEfetiva = Math.min(curaTotal, 100 - this.game.localPlayer.health);
+                            this.game.localPlayer.heal(curaEfetiva);
+                            
+                            // Efeito visual de cura
+                            this.game.showHealEffect(curaEfetiva);
+                        }
                     } else if (loot.type === 'ammo') {
                         this.game.localPlayer.addAmmo(30);
                     }

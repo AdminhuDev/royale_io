@@ -48,7 +48,10 @@ export class Game {
         this.gameLoopId = null;
         this.matchStartTimer = 10;
         this.minPlayers = 4;
-        this.score = 0; // Score total da partida
+        this.score = 0;
+        
+        // Efeitos visuais
+        this.healEffects = [];
         
         // Gerenciadores
         this.camera = new Camera(this);
@@ -103,13 +106,38 @@ export class Game {
             }
         };
 
+        const keyDownHandler = (e) => {
+            if (e.code === 'Space' && this.localPlayer && !this.isGameOver) {
+                e.preventDefault(); // Evitar scroll da página
+                if (this.localPlayer.shield >= 20) { // Só ativa se tiver pelo menos 20 de escudo
+                    if (this.localPlayer.activateShield()) {
+                        // Diminui o escudo ao usar
+                        this.localPlayer.shield = Math.max(0, this.localPlayer.shield - 20);
+                        
+                        // Atualizar UI do escudo
+                        const shieldElement = document.getElementById('shield');
+                        if (shieldElement) {
+                            shieldElement.textContent = Math.ceil(this.localPlayer.shield);
+                        }
+                        
+                        const shieldCooldown = document.getElementById('shield-cooldown');
+                        if (shieldCooldown) {
+                            shieldCooldown.style.height = '100%';
+                        }
+                    }
+                }
+            }
+        };
+
         this.canvas.addEventListener('mousemove', mouseMoveHandler);
         this.canvas.addEventListener('click', clickHandler);
+        window.addEventListener('keydown', keyDownHandler);
 
         // Armazenar referências para remover depois
         this.eventHandlers = {
             mousemove: mouseMoveHandler,
-            click: clickHandler
+            click: clickHandler,
+            keydown: keyDownHandler
         };
     }
 
@@ -359,7 +387,6 @@ export class Game {
     update() {
         switch (this.gameState) {
             case 'waiting':
-                // Verificar se precisa adicionar bots
                 this.manageBots();
                 this.camera.update();
                 break;
@@ -373,15 +400,41 @@ export class Game {
                 break;
 
             case 'running':
-                // Atualizar bots
-                this.bots.forEach(bot => bot.update(this));
+                // Atualizar escudo do jogador local
+                if (this.localPlayer) {
+                    this.localPlayer.updateShield();
+                    
+                    // Recarregar escudo lentamente
+                    if (this.localPlayer.shield < 100 && this.localPlayer.shieldCooldown <= 0) {
+                        this.localPlayer.shield = Math.min(100, this.localPlayer.shield + 0.1);
+                    }
+                    
+                    // Atualizar UI do escudo
+                    const shieldElement = document.getElementById('shield');
+                    const shieldCooldown = document.getElementById('shield-cooldown');
+                    
+                    if (shieldElement) {
+                        shieldElement.textContent = Math.ceil(this.localPlayer.shield);
+                    }
+                    
+                    if (shieldCooldown) {
+                        if (this.localPlayer.shieldCooldown > 0) {
+                            const progress = ((this.localPlayer.shieldCooldownMax - this.localPlayer.shieldCooldown) / this.localPlayer.shieldCooldownMax) * 100;
+                            shieldCooldown.style.height = `${100 - progress}%`;
+                        } else {
+                            shieldCooldown.style.height = '0%';
+                        }
+                    }
+                }
 
+                this.bots.forEach(bot => bot.update(this));
                 this.movePlayer();
                 this.updateBullets();
                 this.updateSafeZone();
                 this.lootManager.update();
                 this.camera.update();
                 this.updateMouseWorldPosition();
+                this.updateEffects();
 
                 if (this.networkManager && this.localPlayer) {
                     this.networkManager.sendPosition();
@@ -448,14 +501,12 @@ export class Game {
                 this.renderSafeZone();
                 this.lootManager.render(this.ctx);
 
-                // Renderizar jogadores
                 this.players.forEach(player => {
                     if (player.health > 0) {
                         player.render(this.ctx);
                     }
                 });
 
-                // Renderizar bots
                 this.bots.forEach(bot => {
                     if (bot.health > 0) {
                         bot.render(this.ctx);
@@ -467,6 +518,8 @@ export class Game {
                 if (this.localPlayer && this.localPlayer.health > 0) {
                     this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true);
                 }
+
+                this.renderEffects();
                 break;
 
             case 'ended':
@@ -659,6 +712,7 @@ export class Game {
         if (this.eventHandlers) {
             this.canvas.removeEventListener('mousemove', this.eventHandlers.mousemove);
             this.canvas.removeEventListener('click', this.eventHandlers.click);
+            window.removeEventListener('keydown', this.eventHandlers.keydown);
             this.eventHandlers = null;
         }
 
@@ -713,5 +767,46 @@ export class Game {
 
     renderEndScreen() {
         // Implementar renderização da tela de fim de jogo
+    }
+
+    showHealEffect(amount) {
+        if (this.localPlayer) {
+            this.healEffects.push({
+                x: this.localPlayer.x,
+                y: this.localPlayer.y - this.localPlayer.radius - 40,
+                amount: amount,
+                opacity: 1,
+                yOffset: 0
+            });
+        }
+    }
+
+    updateEffects() {
+        // Atualizar efeitos de cura
+        for (let i = this.healEffects.length - 1; i >= 0; i--) {
+            const effect = this.healEffects[i];
+            effect.opacity -= 0.02;
+            effect.yOffset -= 1;
+            
+            if (effect.opacity <= 0) {
+                this.healEffects.splice(i, 1);
+            }
+        }
+    }
+
+    renderEffects() {
+        // Renderizar efeitos de cura
+        this.healEffects.forEach(effect => {
+            this.ctx.save();
+            this.ctx.fillStyle = `rgba(76, 175, 80, ${effect.opacity})`;
+            this.ctx.font = 'bold 20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(
+                `+${Math.round(effect.amount)}`,
+                effect.x,
+                effect.y + effect.yOffset
+            );
+            this.ctx.restore();
+        });
     }
 }
