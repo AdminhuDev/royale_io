@@ -51,32 +51,53 @@ export class NetworkManager {
             case 'player_joined':
                 if (message.playerId !== this.playerId) {
                     this.game.addPlayer(message.playerId, message.data);
+                    if (this.game.gameState === 'waiting' && 
+                        this.game.players.size + 1 >= 2) {
+                        this.game.gameState = 'starting';
+                    }
                 }
                 break;
 
             case 'player_left':
+            case 'player_died':
                 if (message.playerId !== this.playerId) {
                     this.game.removePlayer(message.playerId);
                 }
                 break;
 
+            case 'game_state':
+                this.handleGameState(message.data);
+                break;
+
             case 'player_update':
+                if (this.game.gameState !== 'running') return;
                 if (message.playerId !== this.playerId) {
                     this.game.updatePlayer(message.playerId, message.data);
                 }
                 break;
 
             case 'bullet_created':
+                if (this.game.gameState !== 'running') return;
                 if (message.playerId !== this.playerId) {
                     this.game.addBullet(message.data);
                 }
                 break;
 
             case 'player_hit':
+                if (this.game.gameState !== 'running') return;
                 if (message.playerId === this.playerId) {
                     this.game.handleHit(message.data.damage);
                 }
                 break;
+        }
+    }
+
+    handleGameState(data) {
+        const oldState = this.game.gameState;
+        this.game.gameState = data.state;
+
+        if (data.state === 'starting') {
+            this.game.matchStartTimer = data.startTimer;
         }
     }
 
@@ -97,7 +118,7 @@ export class NetworkManager {
     }
 
     sendPosition() {
-        if (!this.connected || !this.playerId) return;
+        if (!this.connected || !this.playerId || this.game.gameState !== 'running') return;
 
         this.send({
             type: 'position',
@@ -112,7 +133,7 @@ export class NetworkManager {
     }
 
     sendShoot(bullet) {
-        if (!this.connected || !this.playerId) return;
+        if (!this.connected || !this.playerId || this.game.gameState !== 'running') return;
 
         this.send({
             type: 'shoot',
@@ -128,13 +149,26 @@ export class NetworkManager {
     }
 
     sendHit(targetPlayerId, damage) {
-        if (!this.connected || !this.playerId) return;
+        if (!this.connected || !this.playerId || this.game.gameState !== 'running') return;
 
         this.send({
             type: 'hit',
             data: {
                 targetId: targetPlayerId,
                 damage: damage
+            }
+        });
+    }
+
+    sendDeath() {
+        if (!this.connected || !this.playerId) return;
+
+        this.send({
+            type: 'player_died',
+            data: {
+                killedBy: null,
+                score: this.game.localPlayer.score,
+                kills: this.game.localPlayer.kills
             }
         });
     }

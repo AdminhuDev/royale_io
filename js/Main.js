@@ -1,138 +1,82 @@
 import { Game } from './Game.js';
 import { Logger } from './Logger.js';
 
+// Carregar e mostrar estatísticas
+function updateStats() {
+    const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
+    
+    // Valores padrão caso não existam
+    stats.highScore = stats.highScore || 0;
+    stats.lastScore = stats.lastScore || 0;
+    stats.totalKills = stats.totalKills || 0;
+    stats.wins = stats.wins || 0;
+
+    // Atualizar elementos na tela
+    document.getElementById('high-score-value').textContent = stats.highScore;
+    document.getElementById('last-score-value').textContent = stats.lastScore;
+    document.getElementById('total-kills-value').textContent = stats.totalKills;
+    document.getElementById('wins-value').textContent = stats.wins;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    try {
-        // Elementos da UI
-        const canvas = document.getElementById('gameCanvas');
-        const startScreen = document.getElementById('start-screen');
-        const startButton = document.getElementById('start-game-button');
-        const playerNameInput = document.getElementById('player-name-input');
-        const waitingScreen = document.getElementById('waiting-screen');
-        const gameUI = document.getElementById('game-ui');
-        const gameOver = document.getElementById('game-over');
-        const playAgainButton = document.getElementById('play-again');
-        const backToMenuButton = document.getElementById('back-to-menu');
+    // Atualizar estatísticas ao carregar a página
+    updateStats();
 
-        if (!canvas || !startScreen || !startButton || !playerNameInput) {
-            throw new Error('Elementos essenciais não encontrados');
+    const startScreen = document.getElementById('start-screen');
+    const gameCanvas = document.getElementById('gameCanvas');
+    const gameUI = document.getElementById('game-ui');
+    const startButton = document.getElementById('start-game-button');
+    const playerNameInput = document.getElementById('player-name-input');
+    const tutorialButton = document.getElementById('tutorial-button');
+    const tutorialScreen = document.getElementById('tutorial-screen');
+    const closeTutorialButton = document.getElementById('close-tutorial');
+    const playAgainButton = document.getElementById('play-again');
+    const backToMenuButton = document.getElementById('back-to-menu');
+    
+    let game = null;
+
+    // Carregar nome do jogador salvo
+    playerNameInput.value = localStorage.getItem('playerName') || '';
+
+    function startGame() {
+        startScreen.style.display = 'none';
+        gameCanvas.style.display = 'block';
+        gameUI.style.display = 'block';
+        
+        // Salvar nome do jogador
+        if (playerNameInput.value.trim()) {
+            localStorage.setItem('playerName', playerNameInput.value.trim());
         }
 
-        // Configurar canvas
-        canvas.style.display = 'none';
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
-
-        // Event Listeners
-        startButton.addEventListener('click', startNewGame);
-
-        // Botões do Game Over
-        if (playAgainButton) {
-            playAgainButton.addEventListener('click', () => {
-                if (window.game) {
-                    window.game.destroy();
-                }
-                hideAllScreens();
-                startNewGame();
-            });
-        }
-
-        if (backToMenuButton) {
-            backToMenuButton.addEventListener('click', () => {
-                if (window.game) {
-                    window.game.destroy();
-                }
-                hideAllScreens();
-                showStartScreen();
-            });
-        }
-
-        // Tutorial
-        const tutorialButton = document.getElementById('tutorial-button');
-        const tutorialScreen = document.getElementById('tutorial-screen');
-        const closeTutorialButton = document.getElementById('close-tutorial');
-
-        if (tutorialButton && tutorialScreen && closeTutorialButton) {
-            tutorialButton.addEventListener('click', () => {
-                tutorialScreen.style.display = 'flex';
-            });
-
-            closeTutorialButton.addEventListener('click', () => {
-                tutorialScreen.style.display = 'none';
-            });
-        }
-
-        function hideAllScreens() {
-            const screens = [
-                gameOver,
-                startScreen,
-                waitingScreen,
-                gameUI,
-                canvas
-            ];
-            
-            screens.forEach(screen => {
-                if (screen) {
-                    screen.style.display = 'none';
-                }
-            });
-        }
-
-        function startNewGame() {
-            const playerName = playerNameInput.value.trim();
-            if (!playerName) {
-                showInputError(playerNameInput);
-                return;
-            }
-
-            localStorage.setItem('playerName', playerName);
-            hideAllScreens();
-            waitingScreen.style.display = 'flex';
-            
-            // Limpar jogo anterior se existir
-            if (window.game) {
-                // Remover eventos do mouse antigos
-                canvas.removeEventListener('mousemove', window.handleMouseMove);
-                canvas.removeEventListener('click', window.handleClick);
-                window.game = null;
-            }
-            
-            // Criar nova instância do jogo
-            window.game = new Game();
-
-            // Adicionar eventos do mouse
-            setupMouseEvents(canvas);
-
-            // Iniciar contagem
-            startCountdown(3);
-        }
-
-        function showStartScreen() {
-            hideAllScreens();
-            startScreen.style.display = 'flex';
-            
-            // Limpar jogo se existir
-            if (window.game) {
-                canvas.removeEventListener('mousemove', window.handleMouseMove);
-                canvas.removeEventListener('click', window.handleClick);
-                window.game = null;
-            }
-
-            // Resetar input do nome se necessário
-            if (playerNameInput.value.trim() === '') {
-                playerNameInput.value = localStorage.getItem('playerName') || '';
-            }
-        }
-
-    } catch (error) {
-        Logger.error('Erro na inicialização da aplicação', error);
-        alert('Erro ao iniciar o jogo. Por favor, recarregue a página.');
+        game = new Game();
     }
+
+    function backToMenu() {
+        if (game) {
+            game.destroy();
+            game = null;
+        }
+        
+        // Atualizar estatísticas ao voltar ao menu
+        updateStats();
+        
+        gameCanvas.style.display = 'none';
+        gameUI.style.display = 'none';
+        document.getElementById('game-over').style.display = 'none';
+        startScreen.style.display = 'flex';
+    }
+
+    startButton.addEventListener('click', startGame);
+    playAgainButton.addEventListener('click', startGame);
+    backToMenuButton.addEventListener('click', backToMenu);
+
+    tutorialButton.addEventListener('click', () => {
+        tutorialScreen.style.display = 'flex';
+    });
+
+    closeTutorialButton.addEventListener('click', () => {
+        tutorialScreen.style.display = 'none';
+    });
 });
 
 function setupMouseEvents(canvas) {

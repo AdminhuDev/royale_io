@@ -2,6 +2,7 @@ import { LootManager } from './LootManager.js';
 import { Camera } from './Camera.js';
 import { NetworkManager } from './NetworkManager.js';
 import { Player } from './Player.js';
+import { Bot } from './Bot.js';
 
 export class Game {
     setupCanvas() {
@@ -33,7 +34,9 @@ export class Game {
         this.ctx = this.canvas.getContext('2d');
         
         // Estado do jogo
+        this.gameState = 'waiting';
         this.players = new Map();
+        this.bots = new Map();
         this.localPlayer = null;
         this.mouseX = 0;
         this.mouseY = 0;
@@ -43,6 +46,9 @@ export class Game {
         this.worldHeight = 3000;
         this.isGameOver = false;
         this.gameLoopId = null;
+        this.matchStartTimer = 10;
+        this.minPlayers = 4;
+        this.score = 0; // Score total da partida
         
         // Gerenciadores
         this.camera = new Camera(this);
@@ -130,6 +136,10 @@ export class Game {
         
         const isDead = this.localPlayer.takeDamage(damage);
         if (isDead) {
+            // Notificar o servidor sobre a morte
+            if (this.networkManager) {
+                this.networkManager.sendDeath();
+            }
             this.handleGameOver();
         }
     }
@@ -161,13 +171,48 @@ export class Game {
                     return;
                 }
             });
+
+            // Verificar colisão com bots
+            if (bullet) {
+                this.bots.forEach((bot, botId) => {
+                    if (this.checkBulletCollision(bullet, bot)) {
+                        // Aplicar dano ao bot
+                        bot.health -= bullet.damage;
+                        
+                        // Remover bot se morreu
+                        if (bot.health <= 0) {
+                            this.bots.delete(botId);
+                            // Aumentar score do jogador local
+                            if (this.localPlayer) {
+                                this.localPlayer.kills++;
+                                this.score += 100;
+                                this.localPlayer.score = this.score;
+                                
+                                // Atualizar UI
+                                const scoreElement = document.getElementById('score');
+                                if (scoreElement) {
+                                    scoreElement.textContent = this.score;
+                                }
+                                
+                                const killsElement = document.getElementById('kills');
+                                if (killsElement) {
+                                    killsElement.textContent = this.localPlayer.kills;
+                                }
+                            }
+                        }
+                        
+                        // Remover projétil
+                        this.bullets.splice(i, 1);
+                        return;
+                    }
+                });
+            }
             
             // Verificar colisão com os limites do mundo
-            if (bullet.lifetime <= 0 ||
+            if (bullet && (bullet.lifetime <= 0 ||
                 bullet.x < 0 || bullet.x > this.worldWidth ||
-                bullet.y < 0 || bullet.y > this.worldHeight) {
+                bullet.y < 0 || bullet.y > this.worldHeight)) {
                 this.bullets.splice(i, 1);
-                continue;
             }
         }
     }
@@ -191,7 +236,6 @@ export class Game {
 
         if (this.safeZone.shrinking && this.safeZone.currentRadius > 0) {
             const shrinkProgress = 1 - (this.safeZone.currentRadius / this.safeZone.maxRadius);
-            // Limitar dano entre 2 e 10 por segundo
             this.safeZone.damage = Math.min(10, Math.max(2, 2 + (shrinkProgress * 8)));
             
             if (this.safeZone.currentRadius > this.safeZone.targetRadius) {
@@ -200,19 +244,18 @@ export class Game {
                 this.safeZone.currentRadius -= this.safeZone.shrinkSpeed * 0.3;
             }
             
-            // Garantir que a zona nunca fique menor que o raio mínimo
             if (this.safeZone.currentRadius < 50) {
                 this.safeZone.currentRadius = 50;
             }
         }
 
+        // Aplicar dano da zona aos jogadores e bots
         if (this.localPlayer) {
             const dx = this.localPlayer.x - this.safeZone.x;
             const dy = this.localPlayer.y - this.safeZone.y;
             const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
             
             if (distanceFromCenter > this.safeZone.currentRadius) {
-                // Aplicar dano com base na distância da zona
                 const distanceMultiplier = Math.min(2, (distanceFromCenter - this.safeZone.currentRadius) / 100);
                 this.localPlayer.health -= (this.safeZone.damage * distanceMultiplier) * (1/60);
                 
@@ -222,10 +265,27 @@ export class Game {
                 }
             }
         }
+
+        // Aplicar dano da zona aos bots
+        this.bots.forEach((bot, botId) => {
+            const dx = bot.x - this.safeZone.x;
+            const dy = bot.y - this.safeZone.y;
+            const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distanceFromCenter > this.safeZone.currentRadius) {
+                const distanceMultiplier = Math.min(2, (distanceFromCenter - this.safeZone.currentRadius) / 100);
+                bot.health -= (this.safeZone.damage * distanceMultiplier) * (1/60);
+                
+                if (bot.health <= 0) {
+                    this.bots.delete(botId);
+                }
+            }
+        });
     }
 
-    handleGameOver() {
+    handleGameOver(isVictory = false) {
         this.isGameOver = true;
+        this.gameState = 'ended';
         if (this.gameLoopId) {
             cancelAnimationFrame(this.gameLoopId);
             this.gameLoopId = null;
@@ -236,11 +296,21 @@ export class Game {
         const finalKillsElement = document.getElementById('final-kills');
         const finalTimeElement = document.getElementById('final-time');
         const gameUI = document.getElementById('game-ui');
+        const gameOverTitle = document.querySelector('#game-over h2');
 
         if (gameOverScreen) {
-            // Atualizar estatísticas finais
-            if (finalScoreElement) finalScoreElement.textContent = this.localPlayer.score || 0;
-            if (finalKillsElement) finalKillsElement.textContent = this.localPlayer.kills || 0;
+            // Adicionar bônus de vitória
+            if (isVictory) {
+                this.score += 500;
+            }
+
+            if (gameOverTitle) {
+                gameOverTitle.textContent = isVictory ? 'Vitória!' : 'Game Over';
+                gameOverTitle.style.color = isVictory ? '#4CAF50' : '#ff4444';
+            }
+
+            if (finalScoreElement) finalScoreElement.textContent = this.score;
+            if (finalKillsElement) finalKillsElement.textContent = this.localPlayer.kills;
             if (finalTimeElement) {
                 const minutes = Math.floor(this.frameCount / (60 * 60));
                 const seconds = Math.floor((this.frameCount / 60) % 60);
@@ -249,70 +319,150 @@ export class Game {
 
             // Salvar estatísticas
             const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
-            const currentScore = this.localPlayer.score || 0;
             
-            stats.lastScore = currentScore;
-            stats.highScore = Math.max(stats.highScore || 0, currentScore);
-            stats.totalKills = (stats.totalKills || 0) + (this.localPlayer.kills || 0);
+            stats.lastScore = this.score;
+            stats.highScore = Math.max(stats.highScore || 0, this.score);
+            stats.totalKills = (stats.totalKills || 0) + this.localPlayer.kills;
+            stats.wins = (stats.wins || 0) + (isVictory ? 1 : 0);
             
             localStorage.setItem('gameStats', JSON.stringify(stats));
 
-            // Mostrar tela de game over
+            // Esconder UI do jogo e mostrar tela de game over
             if (gameUI) gameUI.style.display = 'none';
             gameOverScreen.style.display = 'flex';
+
+            // Atualizar estatísticas na tela inicial
+            const highScoreElement = document.getElementById('high-score-value');
+            const lastScoreElement = document.getElementById('last-score-value');
+            const totalKillsElement = document.getElementById('total-kills-value');
+            const winsElement = document.getElementById('wins-value');
+
+            if (highScoreElement) highScoreElement.textContent = stats.highScore;
+            if (lastScoreElement) lastScoreElement.textContent = stats.lastScore;
+            if (totalKillsElement) totalKillsElement.textContent = stats.totalKills;
+            if (winsElement) winsElement.textContent = stats.wins;
         }
     }
 
     update() {
-        this.movePlayer();
-        this.updateBullets();
-        this.updateSafeZone();
-        this.lootManager.update();
-        this.camera.update();
-        
-        // Atualizar posição do mouse no mundo a cada frame
-        this.updateMouseWorldPosition();
+        switch (this.gameState) {
+            case 'waiting':
+                // Verificar se precisa adicionar bots
+                this.manageBots();
+                this.camera.update();
+                break;
 
-        // Enviar posição para o servidor
-        if (this.networkManager && this.localPlayer) {
-            this.networkManager.sendPosition();
+            case 'starting':
+                this.matchStartTimer--;
+                if (this.matchStartTimer <= 0) {
+                    this.gameState = 'running';
+                }
+                this.camera.update();
+                break;
+
+            case 'running':
+                // Atualizar bots
+                this.bots.forEach(bot => bot.update(this));
+
+                this.movePlayer();
+                this.updateBullets();
+                this.updateSafeZone();
+                this.lootManager.update();
+                this.camera.update();
+                this.updateMouseWorldPosition();
+
+                if (this.networkManager && this.localPlayer) {
+                    this.networkManager.sendPosition();
+                }
+                break;
+
+            case 'ended':
+                this.camera.update();
+                break;
+        }
+    }
+
+    manageBots() {
+        const totalPlayers = this.players.size + 1; // +1 para o jogador local
+        const botsNeeded = Math.max(0, this.minPlayers - totalPlayers);
+        
+        // Remover bots extras se necessário
+        if (this.bots.size > botsNeeded) {
+            const botsToRemove = this.bots.size - botsNeeded;
+            let count = 0;
+            this.bots.forEach((bot, id) => {
+                if (count < botsToRemove) {
+                    this.bots.delete(id);
+                    count++;
+                }
+            });
+        }
+        
+        // Adicionar bots faltantes
+        while (this.bots.size < botsNeeded) {
+            const botId = `bot_${Date.now()}_${Math.random()}`;
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * this.safeZone.currentRadius * 0.8;
+            const x = this.safeZone.x + Math.cos(angle) * radius;
+            const y = this.safeZone.y + Math.sin(angle) * radius;
+            
+            const bot = new Bot(x, y);
+            this.bots.set(botId, bot);
+        }
+
+        // Iniciar partida se houver jogadores suficientes
+        if (totalPlayers + this.bots.size >= this.minPlayers && this.gameState === 'waiting') {
+            this.gameState = 'starting';
         }
     }
 
     render() {
-        // Limpar canvas
         this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-        // Começar transformação da câmera
         this.camera.begin(this.ctx);
-
-        // Desenhar grade de fundo
         this.renderGrid();
 
-        // Desenhar zona segura
-        this.renderSafeZone();
+        switch (this.gameState) {
+            case 'waiting':
+                this.renderWaitingScreen();
+                break;
 
-        // Desenhar loots
-        this.lootManager.render(this.ctx);
+            case 'starting':
+                this.renderStartingScreen();
+                break;
 
-        // Desenhar outros jogadores
-        this.players.forEach(player => {
-            player.render(this.ctx);
-        });
+            case 'running':
+                this.renderSafeZone();
+                this.lootManager.render(this.ctx);
 
-        // Desenhar projéteis
-        this.renderBullets();
+                // Renderizar jogadores
+                this.players.forEach(player => {
+                    if (player.health > 0) {
+                        player.render(this.ctx);
+                    }
+                });
 
-        // Desenhar jogador local
-        if (this.localPlayer) {
-            this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true);
+                // Renderizar bots
+                this.bots.forEach(bot => {
+                    if (bot.health > 0) {
+                        bot.render(this.ctx);
+                    }
+                });
+
+                this.renderBullets();
+
+                if (this.localPlayer && this.localPlayer.health > 0) {
+                    this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true);
+                }
+                break;
+
+            case 'ended':
+                this.renderEndScreen();
+                break;
         }
 
-        // Terminar transformação da câmera
         this.camera.end(this.ctx);
-
-        // UI (fora da transformação da câmera)
         this.updateUI();
     }
 
@@ -383,14 +533,58 @@ export class Game {
         // Atualizar elementos da UI
         const healthElement = document.getElementById('health');
         const ammoElement = document.getElementById('ammo');
+        const scoreElement = document.getElementById('score');
+        const killsElement = document.getElementById('kills');
         const zoneTimerElement = document.getElementById('zone-timer');
+        const playersAliveElement = document.getElementById('players-alive');
 
-        if (healthElement) {
-            healthElement.textContent = Math.ceil(this.localPlayer.health);
+        if (this.localPlayer) {
+            if (healthElement) {
+                healthElement.textContent = Math.ceil(this.localPlayer.health);
+            }
+            if (ammoElement) {
+                ammoElement.textContent = this.localPlayer.ammo;
+            }
+            if (scoreElement) {
+                scoreElement.textContent = this.score;
+            }
+            if (killsElement) {
+                killsElement.textContent = this.localPlayer.kills;
+            }
         }
-        if (ammoElement) {
-            ammoElement.textContent = this.localPlayer.ammo;
+
+        // Atualizar contagem de jogadores vivos
+        if (playersAliveElement) {
+            let alivePlayers = 0;
+            
+            // Contar jogadores vivos
+            this.players.forEach(player => {
+                if (player.health > 0) alivePlayers++;
+            });
+            
+            // Contar bots vivos
+            this.bots.forEach(bot => {
+                if (bot.health > 0) alivePlayers++;
+            });
+            
+            // Adicionar jogador local se estiver vivo
+            if (this.localPlayer && this.localPlayer.health > 0) {
+                alivePlayers++;
+            }
+
+            playersAliveElement.textContent = `Jogadores: ${alivePlayers}`;
+
+            // Verificar condição de vitória
+            if (alivePlayers === 1 && this.localPlayer && this.localPlayer.health > 0) {
+                // Bônus de vitória
+                this.score += 500;
+                if (scoreElement) {
+                    scoreElement.textContent = this.score;
+                }
+                this.handleGameOver(true);
+            }
         }
+
         if (zoneTimerElement) {
             if (!this.safeZone.shrinking) {
                 zoneTimerElement.textContent = `Zona: ${this.safeZone.timer}s`;
@@ -430,6 +624,10 @@ export class Game {
         const player = this.players.get(playerId);
         if (player) {
             Object.assign(player, data);
+            // Remover jogador se estiver morto
+            if (player.health <= 0) {
+                this.players.delete(playerId);
+            }
         }
     }
 
@@ -450,5 +648,37 @@ export class Game {
         if (this.networkManager) {
             this.networkManager.disconnect();
         }
+    }
+
+    renderWaitingScreen() {
+        const text = 'Preparando partida...';
+        const totalPlayers = this.players.size + 1 + this.bots.size;
+        const statusText = `${totalPlayers} jogadores (${this.bots.size} bots)`;
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '48px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(text, this.worldWidth/2, this.worldHeight/2 - 50);
+        
+        this.ctx.font = '24px Arial';
+        this.ctx.fillText(statusText, this.worldWidth/2, this.worldHeight/2 + 50);
+    }
+
+    renderStartingScreen() {
+        const text = 'Partida começando em:';
+        const timerText = Math.ceil(this.matchStartTimer / 60).toString();
+
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '48px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(text, this.worldWidth/2, this.worldHeight/2 - 50);
+        
+        this.ctx.font = '72px Arial';
+        this.ctx.fillStyle = '#4CAF50';
+        this.ctx.fillText(timerText, this.worldWidth/2, this.worldHeight/2 + 50);
+    }
+
+    renderEndScreen() {
+        // Implementar renderização da tela de fim de jogo
     }
 }
