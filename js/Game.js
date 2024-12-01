@@ -1,870 +1,532 @@
-import { SafeZoneManager } from './SafeZoneManager.js';
-import { Player } from './Player.js';
-import { BotManager } from './Bots.js';
-import { UIManager } from './UIManager.js';
 import { LootManager } from './LootManager.js';
-import { BulletManager } from './BulletManager.js';
+import { Camera } from './Camera.js';
 import { NetworkManager } from './NetworkManager.js';
-import { Logger } from './Logger.js';
 
 export class Game {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        if (!this.canvas) throw new Error('Canvas não encontrado');
-        this.ctx = this.canvas.getContext('2d');
-        if (!this.ctx) throw new Error('Contexto 2D não suportado');
-        this.setupCanvas();
-
-        this.TOTAL_PLAYERS = 10;
-        this.playersAlive = this.TOTAL_PLAYERS;
-
-        this.initializeGame();
-        this.setupEventListeners();
-        this.gameLoop();
-
-        this.network = new NetworkManager(this);
-        
-        this.isMultiplayer = true;
-        this.otherPlayers = new Map();
-
-        this.lastFrameTime = performance.now();
-        this.frameCount = 0;
-        this.fps = 0;
-        this.fpsUpdateInterval = setInterval(() => this.updateFPS(), 1000);
-
-        this.firing = false;
-        this.lastShotTime = 0;
-        this.shotCooldown = 200;
-
-        this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-        this.touchStartPos = { x: 0, y: 0 };
-        this.setupTouchControls();
-    }
-
-    initializeGame() {
-        // Primeiro inicializar o SafeZone
-        this.safeZone = new SafeZoneManager(this.canvas);
-        this.safeZone.setGame(this);
-
-        // Depois inicializar o player
-        this.player = new Player(this.canvas.width/2, this.canvas.height/2);
-        this.player.game = this;
-
-        // Depois os managers que dependem do SafeZone
-        this.botManager = null;
-        this.ui = new UIManager(this);
-        this.bulletManager = new BulletManager(this);
-        this.lootManager = new LootManager(this);
-        
-        // Inicializar NetworkManager por último
-        this.network = new NetworkManager(this);
-        
-        // Definir estado inicial
-        this.gameState = 'waiting';
-        this.waitingScreen = document.getElementById('waiting-screen');
-        this.countdownElement = document.getElementById('countdown');
-        this.mouse = {x: this.player.x, y: this.player.y};
-        this.camera = {x: 0, y: 0, width: this.canvas.width, height: this.canvas.height};
-        
-        // Inicializar outras propriedades
-        this.checkingWinner = false;
-        this.gameEnded = false;
-        this.victoryRoyale = false;
-        this.deathProcessed = false;
-        this.otherPlayers = new Map();
-        this.countdownStarted = false;
-
-        // Mostrar tela de espera
-        if (this.waitingScreen) {
-            this.waitingScreen.style.display = 'flex';
-        }
-    }
-
-    startCountdown(seconds) {
-        let timeLeft = seconds;
-        
-        const updateCountdown = () => {
-            if (this.countdownElement) {
-                this.countdownElement.textContent = timeLeft;
-            }
+    setupCanvas() {
+        // Ajustar para resolução do dispositivo e zoom
+        const updateCanvasSize = () => {
+            const pixelRatio = window.devicePixelRatio || 1;
             
-            if (timeLeft <= 0) {
-                this.startGame();
-            } else {
-                timeLeft--;
-                setTimeout(updateCountdown, 1000);
-            }
+            // Tamanho lógico (CSS)
+            this.canvas.style.width = window.innerWidth + 'px';
+            this.canvas.style.height = window.innerHeight + 'px';
+            
+            // Tamanho real do canvas (considerando pixel ratio)
+            this.canvas.width = window.innerWidth * pixelRatio;
+            this.canvas.height = window.innerHeight * pixelRatio;
+            
+            // Ajustar contexto para pixel ratio
+            this.ctx.scale(pixelRatio, pixelRatio);
         };
 
-        updateCountdown();
+        updateCanvasSize();
+        window.addEventListener('resize', updateCanvasSize);
     }
 
-    startGame() {
-        this.gameState = 'playing';
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
         
-        // Esconder tela de espera
-        if (this.waitingScreen) {
-            this.waitingScreen.style.display = 'none';
-        }
+        // Estado do jogo
+        this.players = new Map();
+        this.localPlayer = null;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.bullets = [];
+        this.frameCount = 0;
+        this.worldWidth = 3000;
+        this.worldHeight = 3000;
+        this.isGameOver = false;
+        this.gameLoopId = null;
         
-        // Mostrar elementos do jogo
-        if (this.ui) {
-            this.ui.showGameElements();
-        }
+        // Gerenciadores
+        this.camera = new Camera(this);
+        this.lootManager = new LootManager(this);
+        this.networkManager = new NetworkManager(this);
         
-        // Calcular número de bots baseado em jogadores reais
-        const realPlayers = this.network ? this.network.currentPlayers : 1;
-        const numBots = Math.max(0, this.TOTAL_PLAYERS - realPlayers);
+        // Zona Segura
+        this.safeZone = {
+            x: this.worldWidth / 2,
+            y: this.worldHeight / 2,
+            maxRadius: 1500,
+            currentRadius: 1500,
+            targetRadius: 750,
+            shrinkSpeed: 0.5,
+            damage: 2,
+            timer: 60,
+            shrinking: false,
+            minRadius: 0,
+            active: true
+        };
         
-        // Inicializar BotManager com o número correto de bots
-        this.botManager = new BotManager(numBots, this.canvas);
-        
-        // Posicionar jogador em local seguro
-        let spawnPos;
-        if (this.network) {
-            spawnPos = this.network.calculateSafeSpawnPosition();
-        } else {
-            spawnPos = {
-                x: this.canvas.width / 2,
-                y: this.canvas.height / 2
-            };
-        }
-        
-        this.player.x = spawnPos.x;
-        this.player.y = spawnPos.y;
-        
-        // Iniciar sistemas do jogo
-        this.safeZone.reset();
-        this.lootManager.startLootSpawning();
-        
-        // Iniciar loop do jogo
-        this.gameLoop();
-
-        console.log(`Jogo iniciado com ${realPlayers} jogadores reais e ${numBots} bots`);
+        // Inicialização
+        this.setupCanvas();
+        this.setupEvents();
+        this.createPlayer();
+        this.startGameLoop();
     }
 
-    setupButtons() {
-        if (this.ui.playAgainButton) {
-            this.ui.playAgainButton.onclick = () => {
-                this.ui.hideGameOver();
-                this.startNewGame();
-            };
-        }
-    }
-
-    setupCanvas() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-
-    setupEventListeners() {
-        this.boundHandleResize = this.handleResize.bind(this);
-        this.boundHandleMouseMove = this.handleMouseMove.bind(this);
-        this.boundHandleMouseDown = this.handleMouseDown.bind(this);
-        this.boundHandleMouseUp = this.handleMouseUp.bind(this);
-        this.boundHandleKeyDown = this.handleKeyDown.bind(this);
-
-        window.addEventListener('resize', this.boundHandleResize);
-        this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
-        this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
-        this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
-        window.addEventListener('keydown', this.boundHandleKeyDown);
-    }
-
-    gameLoop() {
-        const now = performance.now();
-        this.frameCount++;
-
-        if (this.gameState === 'playing') {
-            this.update();
-            this.draw();
+    setupEvents() {
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
             
-            // Atualizar FPS em tempo real
-            if (now - this.lastFrameTime >= 1000) {
-                this.fps = Math.round((this.frameCount * 1000) / (now - this.lastFrameTime));
-                this.frameCount = 0;
-                this.lastFrameTime = now;
-                if (this.ui) {
-                    this.ui.updatePerformanceStats(this.fps, this.network?.lastPing || 0);
+            const screenX = (e.clientX - rect.left) * scaleX;
+            const screenY = (e.clientY - rect.top) * scaleY;
+            
+            const worldPos = this.camera.screenToWorld(screenX, screenY);
+            this.mouseX = worldPos.x;
+            this.mouseY = worldPos.y;
+        });
+
+        this.canvas.addEventListener('click', (e) => {
+            if (this.localPlayer && this.localPlayer.health > 0) {
+                this.shoot();
+            }
+        });
+    }
+
+    createPlayer() {
+        const playerName = localStorage.getItem('playerName') || 'Player';
+        this.localPlayer = {
+            x: 1500, // Começa no centro do mundo
+            y: 1500,
+            radius: 20,
+            speed: 5,
+            name: playerName,
+            health: 100,
+            ammo: 30
+        };
+    }
+
+    movePlayer() {
+        if (!this.localPlayer) return;
+
+        const dx = this.mouseX - this.localPlayer.x;
+        const dy = this.mouseY - this.localPlayer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance > 5) {
+            const speed = this.localPlayer.speed;
+            const dirX = (dx / distance) * speed;
+            const dirY = (dy / distance) * speed;
+
+            // Verificar limites do mundo
+            const newX = this.localPlayer.x + dirX;
+            const newY = this.localPlayer.y + dirY;
+
+            if (newX >= this.localPlayer.radius && newX <= 3000 - this.localPlayer.radius) {
+                this.localPlayer.x = newX;
+            }
+            if (newY >= this.localPlayer.radius && newY <= 3000 - this.localPlayer.radius) {
+                this.localPlayer.y = newY;
+            }
+        }
+    }
+
+    shoot() {
+        if (!this.localPlayer || this.localPlayer.ammo <= 0) return;
+
+        // Calcular direção do tiro
+        const dx = this.mouseX - this.localPlayer.x;
+        const dy = this.mouseY - this.localPlayer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+
+        // Criar projétil
+        const bullet = {
+            x: this.localPlayer.x + dirX * (this.localPlayer.radius + 10),
+            y: this.localPlayer.y + dirY * (this.localPlayer.radius + 10),
+            dirX: dirX,
+            dirY: dirY,
+            speed: 15,
+            radius: 5,
+            damage: 10,
+            lifetime: 60
+        };
+
+        this.bullets.push(bullet);
+        this.localPlayer.ammo--;
+
+        // Enviar tiro para o servidor
+        if (this.networkManager) {
+            this.networkManager.sendShoot(bullet);
+        }
+    }
+
+    updateBullets() {
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            
+            bullet.x += bullet.dirX * bullet.speed;
+            bullet.y += bullet.dirY * bullet.speed;
+            bullet.lifetime--;
+
+            // Verificar colisão com jogadores
+            this.players.forEach((player, playerId) => {
+                if (this.checkBulletCollision(bullet, player)) {
+                    // Aplicar dano
+                    player.health -= bullet.damage;
+                    
+                    // Enviar atualização do dano
+                    if (this.networkManager) {
+                        this.networkManager.sendHit(playerId, bullet.damage);
+                    }
+                    
+                    // Remover projétil
+                    this.bullets.splice(i, 1);
+                    return;
+                }
+            });
+            
+            // Verificar colisão com os limites do mundo
+            if (bullet.lifetime <= 0 ||
+                bullet.x < 0 || bullet.x > this.worldWidth ||
+                bullet.y < 0 || bullet.y > this.worldHeight) {
+                this.bullets.splice(i, 1);
+                continue;
+            }
+        }
+    }
+
+    checkBulletCollision(bullet, player) {
+        const dx = bullet.x - player.x;
+        const dy = bullet.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance < player.radius + bullet.radius;
+    }
+
+    handleHit(damage) {
+        if (!this.localPlayer) return;
+        
+        this.localPlayer.health -= damage;
+        
+        if (this.localPlayer.health <= 0) {
+            this.localPlayer.health = 0;
+            this.handleGameOver();
+        }
+    }
+
+    updateSafeZone() {
+        if (!this.safeZone.shrinking && this.frameCount % 60 === 0) {
+            this.safeZone.timer--;
+            
+            if (this.safeZone.timer <= 0) {
+                this.safeZone.shrinking = true;
+                this.safeZone.timer = 0;
+            }
+        }
+
+        if (this.safeZone.shrinking && this.safeZone.currentRadius > 0) {
+            const shrinkProgress = 1 - (this.safeZone.currentRadius / this.safeZone.maxRadius);
+            this.safeZone.damage = 2 + (shrinkProgress * 8); // Aumentado o dano máximo
+            
+            if (this.safeZone.currentRadius > this.safeZone.targetRadius) {
+                this.safeZone.currentRadius -= this.safeZone.shrinkSpeed;
+            } else {
+                this.safeZone.currentRadius -= this.safeZone.shrinkSpeed * 0.3;
+            }
+            
+            if (this.safeZone.currentRadius < 0) {
+                this.safeZone.currentRadius = 0;
+            }
+        }
+
+        if (this.localPlayer) {
+            const dx = this.localPlayer.x - this.safeZone.x;
+            const dy = this.localPlayer.y - this.safeZone.y;
+            const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distanceFromCenter > this.safeZone.currentRadius) {
+                this.localPlayer.health -= this.safeZone.damage * (1/60);
+                
+                if (this.localPlayer.health <= 0) {
+                    this.localPlayer.health = 0;
+                    this.handleGameOver();
                 }
             }
-        } else if (this.gameState === 'gameover') {
-            this.draw();
-            if (this.gameEnded) {
-                return;
-            }
-        }
-
-        if (!this.gameEnded) {
-            requestAnimationFrame(() => this.gameLoop());
         }
     }
 
-    updateFPS() {
-        const currentFPS = this.fps;
-        if (this.ui) {
-            this.ui.updatePerformanceStats(currentFPS, this.network?.lastPing || 0);
+    handleGameOver() {
+        this.isGameOver = true;
+        if (this.gameLoopId) {
+            cancelAnimationFrame(this.gameLoopId);
+            this.gameLoopId = null;
+        }
+
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score');
+        const finalKillsElement = document.getElementById('final-kills');
+        const finalTimeElement = document.getElementById('final-time');
+        const gameUI = document.getElementById('game-ui');
+
+        if (gameOverScreen) {
+            // Atualizar estatísticas finais
+            if (finalScoreElement) finalScoreElement.textContent = this.localPlayer.score || 0;
+            if (finalKillsElement) finalKillsElement.textContent = this.localPlayer.kills || 0;
+            if (finalTimeElement) {
+                const minutes = Math.floor(this.frameCount / (60 * 60));
+                const seconds = Math.floor((this.frameCount / 60) % 60);
+                finalTimeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+
+            // Salvar estatísticas
+            const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
+            const currentScore = this.localPlayer.score || 0;
+            
+            stats.lastScore = currentScore;
+            stats.highScore = Math.max(stats.highScore || 0, currentScore);
+            stats.totalKills = (stats.totalKills || 0) + (this.localPlayer.kills || 0);
+            
+            localStorage.setItem('gameStats', JSON.stringify(stats));
+
+            // Mostrar tela de game over
+            if (gameUI) gameUI.style.display = 'none';
+            gameOverScreen.style.display = 'flex';
         }
     }
 
     update() {
-        if (this.gameState !== 'playing') return;
+        this.movePlayer();
+        this.updateBullets();
+        this.updateSafeZone();
+        this.lootManager.update();
+        this.camera.update();
 
-        // Atualizar jogador local
-        if (this.player.isAlive) {
-            this.player.update(this.mouse, this.canvas, this.safeZone);
-            
-            // Enviar posição mais frequentemente
-            if (this.network?.updatePosition) {
-                this.network.updatePosition();
-            }
-        }
-
-        // Atualizar outros jogadores com interpolação
-        if (this.otherPlayers) {
-            this.otherPlayers.forEach(player => {
-                if (player.isAlive) {
-                    player.update(null, this.canvas, this.safeZone);
-                }
-            });
-        }
-
-        this.safeZone.update();
-        this.checkGameState();
-        
-        if (!this.gameEnded) {
-            this.updatePlayer();
-            
-            if (this.isMultiplayer && this.network) {
-                this.network.updatePosition();
-            }
-        }
-
-        if (!this.gameEnded) {
-            this.botManager.updateBots(this.safeZone.config, this.bulletManager.bullets, this.player);
-            this.bulletManager.update();
-            this.lootManager.update();
+        // Enviar posição para o servidor
+        if (this.networkManager && this.localPlayer) {
+            this.networkManager.sendPosition();
         }
     }
 
-    draw() {
-        if (!this.ctx || !this.canvas) return;
-        
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.save();
+    render() {
+        // Limpar canvas
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-        // Calcular posição da câmera apenas se o player existir
-        if (this.player) {
-            const cameraX = this.player.x - this.canvas.width/2;
-            const cameraY = this.player.y - this.canvas.height/2;
-            this.ctx.translate(-cameraX, -cameraY);
+        // Começar transformação da câmera
+        this.camera.begin(this.ctx);
+
+        // Desenhar grade de fundo
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.lineWidth = 1;
+        const gridSize = 100;
+        for (let x = 0; x <= 3000; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, 3000);
+            this.ctx.stroke();
+        }
+        for (let y = 0; y <= 3000; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(3000, y);
+            this.ctx.stroke();
         }
 
-        // Desenhar elementos do jogo
-        this.drawGameElements();
+        // Desenhar borda do mundo
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(0, 0, 3000, 3000);
+
+        // Desenhar zona segura
+        this.ctx.beginPath();
+        this.ctx.arc(1500, 1500, this.safeZone.currentRadius, 0, Math.PI * 2);
+        this.ctx.strokeStyle = '#4CAF50';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // Área fora da zona
+        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        this.ctx.fillRect(0, 0, 3000, 3000);
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(1500, 1500, this.safeZone.currentRadius, 0, Math.PI * 2);
+        this.ctx.clip();
+        this.ctx.clearRect(0, 0, 3000, 3000);
+        this.ctx.restore();
+
+        // Desenhar loots
+        this.lootManager.render(this.ctx);
 
         // Desenhar outros jogadores
-        if (this.otherPlayers) {
-            this.otherPlayers.forEach(player => {
-                if (player && player.isAlive) {
-                    player.draw(this.ctx);
-                }
-            });
-        }
+        this.players.forEach(player => {
+            // Corpo do jogador
+            this.ctx.beginPath();
+            this.ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            this.ctx.fillStyle = '#ff4444';
+            this.ctx.fill();
+            this.ctx.closePath();
 
-        this.ctx.restore();
+            // Nome do jogador
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(
+                player.name,
+                player.x,
+                player.y - player.radius - 10
+            );
 
-        // Desenhar crosshair apenas se o player estiver vivo
-        if (this.player && this.player.isAlive && this.mouse) {
-            this.drawCrosshair();
-        }
-    }
-
-    drawGameElements() {
-        if (this.safeZone) {
-            this.safeZone.draw(this.ctx);
-        }
-        if (this.bulletManager) {
-            this.bulletManager.draw(this.ctx);
-        }
-        if (this.lootManager) {
-            this.lootManager.draw(this.ctx);
-        }
-        if (this.botManager) {
-            this.botManager.draw(this.ctx);
-        }
-        if (this.player && this.player.isAlive) {
-            this.player.draw(this.ctx);
-        }
-    }
-
-    drawCrosshair() {
-        const size = 16, width = 2, gap = 4;
-        this.ctx.save();
-        
-        const crosshairColor = this.player.skin?.crosshairColor || 'rgba(255,255,255,0.8)';
-        this.ctx.strokeStyle = crosshairColor;
-        this.ctx.lineWidth = width;
-
-        this.drawCrosshairElements(size, gap, crosshairColor);
-
-        this.ctx.restore();
-    }
-
-    drawCrosshairElements(size, gap, color) {
-        // Linhas horizontais
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.mouse.x - size - gap, this.mouse.y);
-        this.ctx.lineTo(this.mouse.x - gap, this.mouse.y);
-        this.ctx.moveTo(this.mouse.x + gap, this.mouse.y);
-        this.ctx.lineTo(this.mouse.x + size + gap, this.mouse.y);
-        this.ctx.stroke();
-
-        // Linhas verticais
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.mouse.x, this.mouse.y - size - gap);
-        this.ctx.lineTo(this.mouse.x, this.mouse.y - gap);
-        this.ctx.moveTo(this.mouse.x, this.mouse.y + gap);
-        this.ctx.lineTo(this.mouse.x, this.mouse.y + size + gap);
-        this.ctx.stroke();
-
-        // Ponto central e círculo
-        this.drawCrosshairCenter(size, gap, color);
-    }
-
-    drawCrosshairCenter(size, gap, color) {
-        this.ctx.beginPath();
-        this.ctx.arc(this.mouse.x, this.mouse.y, 2, 0, Math.PI*2);
-        this.ctx.fillStyle = color;
-        this.ctx.fill();
-
-        this.ctx.beginPath();
-        this.ctx.arc(this.mouse.x, this.mouse.y, size + gap, 0, Math.PI*2);
-        
-        if (this.player.skin?.glowEffect) {
-            this.ctx.shadowColor = this.player.skin.glowEffect.color;
-            this.ctx.shadowBlur = this.player.skin.glowEffect.blur || 5;
-        }
-        
-        this.ctx.strokeStyle = color.replace('0.8', '0.2');
-        this.ctx.lineWidth = 1;
-        this.ctx.stroke();
-    }
-
-    handlePlayerShooting() {
-        if (this.firing && this.player.isAlive && this.player.ammo > 0) {
-            const now = Date.now();
-            if (now - this.lastShotTime >= this.shotCooldown) {
-                const worldMouseX = this.mouse.x + (this.player.x - this.canvas.width/2);
-                const worldMouseY = this.mouse.y + (this.player.y - this.canvas.height/2);
-                
-                const bulletColor = this.player.skin?.bulletColor || 
-                                  this.player.skin?.color || 
-                                  this.bulletManager.bulletColor;
-                
-                const bulletFired = this.bulletManager.fireBullet(
-                    this.player.x, 
-                    this.player.y, 
-                    worldMouseX, 
-                    worldMouseY, 
-                    this.player,
-                    bulletColor
-                );
-
-                if (bulletFired && this.isMultiplayer) {
-                    this.network.sendShot({
-                        x: this.player.x,
-                        y: this.player.y,
-                        targetX: worldMouseX,
-                        targetY: worldMouseY,
-                        color: bulletColor,
-                        timestamp: now
-                    });
-                }
-                
-                this.lastShotTime = now;
-            }
-        }
-    }
-
-    checkCollision(obj1, obj2) {
-        const dx = obj1.x - obj2.x;
-        const dy = obj1.y - obj2.y;
-        return Math.hypot(dx, dy) < (obj1.size + obj2.size);
-    }
-
-    checkGameState() {
-        if (this.gameEnded) return;
-
-        // Contar jogadores vivos
-        const aliveBots = this.botManager?.bots.filter(bot => bot.isAlive).length || 0;
-        const aliveNetworkPlayers = Array.from(this.otherPlayers.values())
-            .filter(player => player.isAlive).length;
-        const totalAlive = aliveBots + aliveNetworkPlayers + (this.player.isAlive ? 1 : 0);
-        
-        this.playersAlive = totalAlive;
-        if (this.ui) {
-            this.ui.updatePlayersAlive(this.playersAlive);
-        }
-
-        // Verificar condições de fim de jogo
-        if (!this.player.isAlive && !this.deathProcessed) {
-            this.handlePlayerDeath();
-        } else if (totalAlive === 1 && this.player.isAlive) {
-            this.handleVictory();
-        } else if (totalAlive === 1) {
-            // Verificar vencedor entre bots e jogadores online
-            const winnerBot = this.botManager.bots.find(bot => bot.isAlive);
-            const winnerPlayer = Array.from(this.otherPlayers.values())
-                .find(player => player.isAlive);
+            // Barra de vida
+            const healthBarWidth = 40;
+            const healthBarHeight = 4;
+            const healthPercentage = player.health / 100;
             
-            if (winnerBot) {
-                this.gameEnded = true;
-                this.gameState = 'gameover';
-                this.ui?.showBotVictoryScreen();
-            } else if (winnerPlayer) {
-                this.gameEnded = true;
-                this.gameState = 'gameover';
-                this.ui?.showGameOver(`${winnerPlayer.name} venceu!`);
-            }
-        }
-    }
-
-    handlePlayerDeath() {
-        if (this.deathProcessed) return; // Evitar processamento múltiplo
-        
-        this.deathProcessed = true;
-        this.gameState = 'gameover';
-        this.gameEnded = true;
-
-        // Salvar score antes de limpar
-        const finalScore = this.player ? this.player.score : 0;
-        
-        // Limpar jogo
-        this.cleanupGame();
-
-        // Mostrar tela de morte com o score salvo
-        if (this.ui) {
-            this.ui.showDeathScreen(false, finalScore);
-        }
-    }
-
-    handleVictory() {
-        if (!this.gameEnded && this.player.isAlive) {
-            this.gameEnded = true;
-            this.gameState = 'gameover';
-            this.victoryRoyale = true;
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(
+                player.x - healthBarWidth/2,
+                player.y - player.radius - 20,
+                healthBarWidth,
+                healthBarHeight
+            );
             
-            const finalScore = this.player.score + Math.round(this.player.health);
-            this.player.addScore(50); // Bônus de vitória
-            this.cleanupGame();
-            this.ui.showVictoryScreen(finalScore);
+            this.ctx.fillStyle = '#4CAF50';
+            this.ctx.fillRect(
+                player.x - healthBarWidth/2,
+                player.y - player.radius - 20,
+                healthBarWidth * healthPercentage,
+                healthBarHeight
+            );
+        });
+
+        // Desenhar projéteis
+        for (const bullet of this.bullets) {
+            this.ctx.beginPath();
+            this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+            this.ctx.fillStyle = '#ff4444';
+            this.ctx.fill();
+            this.ctx.closePath();
+
+            // Rastro do projétil
+            this.ctx.beginPath();
+            this.ctx.moveTo(bullet.x, bullet.y);
+            this.ctx.lineTo(bullet.x - bullet.dirX * 20, bullet.y - bullet.dirY * 20);
+            this.ctx.strokeStyle = 'rgba(255, 68, 68, 0.5)';
+            this.ctx.lineWidth = bullet.radius;
+            this.ctx.stroke();
+            this.ctx.closePath();
         }
+
+        // Desenhar jogador local
+        if (this.localPlayer) {
+            // Corpo do jogador
+            this.ctx.beginPath();
+            this.ctx.arc(
+                this.localPlayer.x,
+                this.localPlayer.y,
+                this.localPlayer.radius,
+                0,
+                Math.PI * 2
+            );
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fill();
+            this.ctx.closePath();
+
+            // Nome do jogador
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(
+                this.localPlayer.name,
+                this.localPlayer.x,
+                this.localPlayer.y - this.localPlayer.radius - 10
+            );
+
+            // Linha de mira
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.localPlayer.x, this.localPlayer.y);
+            this.ctx.lineTo(this.mouseX, this.mouseY);
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            this.ctx.stroke();
+            this.ctx.closePath();
+        }
+
+        // Terminar transformação da câmera
+        this.camera.end(this.ctx);
+
+        // UI (fora da transformação da câmera)
+        this.updateUI();
     }
 
-    cleanupGame() {
-        // Parar o loop do jogo
-        this.gameState = 'menu';
-        this.gameEnded = true;
-        
-        // Salvar score antes de destruir o jogador
-        const finalScore = this.player ? this.player.score : 0;
-        localStorage.setItem('playerScore', finalScore.toString());
+    updateUI() {
+        // Atualizar elementos da UI
+        const healthElement = document.getElementById('health');
+        const ammoElement = document.getElementById('ammo');
+        const zoneTimerElement = document.getElementById('zone-timer');
 
-        // Limpar sistemas
-        if (this.bulletManager) {
-            this.bulletManager.destroy();
-            this.bulletManager = null;
+        if (healthElement) {
+            healthElement.textContent = Math.ceil(this.localPlayer.health);
         }
-
-        if (this.lootManager) {
-            this.lootManager.destroy();
-            this.lootManager = null;
+        if (ammoElement) {
+            ammoElement.textContent = this.localPlayer.ammo;
         }
-
-        if (this.botManager) {
-            this.botManager.destroy();
-            this.botManager = null;
-        }
-
-        if (this.network) {
-            this.network.destroy();
-            this.network = null;
-        }
-
-        // Limpar jogadores
-        this.otherPlayers.clear();
-        
-        // Limpar canvas
-        if (this.ctx && this.canvas) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-
-        // Destruir jogador por último
-        if (this.player) {
-            this.player.destroy();
-            this.player = null;
-        }
-
-        // Limpar mouse
-        this.mouse = null;
-    }
-
-    resetGame() {
-        this.ui.hideGameOver();
-        this.spectatorMode = false;
-        this.spectatingBot = null;
-        this.spectatorIndex = 0;
-        this.deathProcessed = false;
-        this._gameOverShown = false; // Reset da flag
-        this.setupButtons();
-    }
-
-    startNewGame() {
-        // Limpar jogo anterior
-        this.cleanupGame();
-        
-        // Reinicializar tudo
-        this.setupCanvas();
-        this.initializeGame();
-        this.setupEventListeners();
-        
-        // Resetar flags
-        this.deathProcessed = false;
-        this.gameEnded = false;
-        
-        // Mostrar tela de espera
-        if (this.waitingScreen) {
-            this.waitingScreen.style.display = 'flex';
-        }
-
-        console.log('Novo jogo iniciado');
-    }
-
-    initializeNewGame() {
-        this.gameState = 'waiting';
-        this.gameEnded = false;
-        this.victoryRoyale = false;
-        this.countdown = 10;
-        this.deathProcessed = false;
-        this.spectatorMode = false;
-        this.spectatingBot = null;
-        this.spectatorIndex = 0;
-
-        this.setupCanvas();
-        this.safeZone = new SafeZoneManager(this.canvas);
-        this.safeZone.setGame(this);
-        this.player = new Player(this.canvas.width / 2, this.canvas.height / 2);
-        this.player.game = this;
-        this.botManager = new BotManager(this.TOTAL_PLAYERS - 1, this.canvas);
-        this.ui = new UIManager(this);
-
-        this.bullets = [];
-        this.loots = [];
-    }
-
-    setupVisibility() {
-        const startScreen = document.getElementById('start-screen');
-        const canvas = document.getElementById('gameCanvas');
-        const ui = document.getElementById('ui');
-
-        if (startScreen) startScreen.style.display = 'none';
-        if (canvas) canvas.style.display = 'block';
-        if (ui) ui.style.display = 'block';
-    }
-
-    destroy() {
-        this.cleanupGame();
-        this.removeEventListeners();
-        
-        // Limpar referências
-        this.canvas = null;
-        this.ctx = null;
-        this.ui = null;
-        this.safeZone = null;
-        
-        console.log('Jogo destruído completamente');
-    }
-
-    removeEventListeners() {
-        window.removeEventListener('resize', this.boundHandleResize);
-        if (this.canvas) {
-            this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
-            this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
-            this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
-        }
-        window.removeEventListener('keydown', this.boundHandleKeyDown);
-    }
-
-    clearTimers() {
-        if (this.resizeTimeout) {
-            clearTimeout(this.resizeTimeout);
-            this.resizeTimeout = null;
-        }
-
-        if (this.lootSpawnInterval) {
-            clearInterval(this.lootSpawnInterval);
-            this.lootSpawnInterval = null;
-        }
-    }
-
-    clearArrays() {
-        this.bullets = [];
-        this.loots = [];
-    }
-
-    destroyComponents() {
-        if (this.ui) {
-            this.ui.destroy();
-            this.ui = null;
-        }
-        
-        if (this.botManager) {
-            this.botManager.destroy();
-            this.botManager = null;
-        }
-        
-        if (this.safeZone) {
-            this.safeZone.destroy();
-            this.safeZone = null;
-        }
-        
-        if (this.player) {
-            this.player.destroy();
-            this.player = null;
-        }
-
-        this.bulletManager.destroy();
-        this.lootManager.destroy();
-
-        this.mouse = null;
-        this.camera = null;
-    }
-
-    clearCanvas() {
-        if (this.ctx && this.canvas) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-    }
-
-    handleResize() {
-        if (this.resizeTimeout) {
-            clearTimeout(this.resizeTimeout);
-        }
-        
-        this.resizeTimeout = setTimeout(() => {
-            const oldWidth = this.canvas.width;
-            const oldHeight = this.canvas.height;
-            
-            this.setupCanvas();
-            
-            const scaleX = this.canvas.width / oldWidth;
-            const scaleY = this.canvas.height / oldHeight;
-            
-            if (this.safeZone) {
-                this.safeZone.config.centerX *= scaleX;
-                this.safeZone.config.centerY *= scaleY;
-                
-                const scale = Math.min(scaleX, scaleY);
-                this.safeZone.config.currentRadius *= scale;
-                this.safeZone.config.initialRadius *= scale;
-            }
-        }, 250);
-    }
-
-    handleMouseMove(e) {
-        if (!this.canvas) return;
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const newMouseX = e.clientX - rect.left;
-        const newMouseY = e.clientY - rect.top;
-
-        // Suavizar movimento do mouse
-        if (!this.mouse) {
-            this.mouse = { x: newMouseX, y: newMouseY };
-        } else {
-            const smoothing = 0.5;
-            this.mouse.x += (newMouseX - this.mouse.x) * smoothing;
-            this.mouse.y += (newMouseY - this.mouse.y) * smoothing;
-        }
-
-        if (this.gameState === 'playing' && !this.spectatorMode && this.player) {
-            const dx = this.mouse.x - this.canvas.width/2;
-            const dy = this.mouse.y - this.canvas.height/2;
-            this.player.targetAngle = Math.atan2(dy, dx);
-        }
-    }
-
-    handleMouseDown() {
-        this.firing = true;
-    }
-
-    handleMouseUp() {
-        this.firing = false;
-    }
-
-    handleKeyDown(e) {
-        if (e.code === 'Escape') {
-            // Se estiver em alguma tela de menu/overlay
-            const tutorialScreen = document.getElementById('tutorial-screen');
-            const skinSelector = document.getElementById('skin-selector');
-            
-            if (tutorialScreen?.style.display === 'flex' || skinSelector?.style.display === 'block') {
-                // Fechar menus se estiverem abertos
-                if (tutorialScreen) tutorialScreen.style.display = 'none';
-                if (skinSelector) skinSelector.style.display = 'none';
-            } else if (this.gameState === 'playing' && !this.gameEnded) {
-                // Se estiver jogando, mostrar confirmação para sair
-                if (confirm('Deseja realmente sair do jogo?')) {
-                    this.gameEnded = true;
-                    this.gameState = 'gameover';
-                    if (this.ui) {
-                        this.ui.showStartScreen();
-                    }
-                }
-            }
-            return;
-        }
-
-        // Resto dos controles
-        if (e.code === 'KeyE') {
-            if (this.player && this.player.isAlive) {
-                if (!this.player.medkits.active && !this.player.medkits.cooldown && this.player.health < 100) {
-                    this.player.activateHealing();
-                }
-            }
-        } else if (e.code === 'Space') {
-            if (this.player && this.player.isAlive) {
-                if (!this.player.shield.cooldown && !this.player.shield.active) {
-                    this.player.activateShield();
-                }
-            }
-        } else if (e.code === 'KeyI' || e.code === 'KeyV') {
-            const skinSelector = document.getElementById('skin-selector');
-            if (skinSelector) {
-                const isVisible = skinSelector.style.display === 'block';
-                skinSelector.style.display = isVisible ? 'none' : 'block';
-                
-                if (!isVisible) {
-                    skinSelector.classList.add('fade-in');
-                    setTimeout(() => skinSelector.classList.remove('fade-in'), 300);
-                }
+        if (zoneTimerElement) {
+            if (!this.safeZone.shrinking) {
+                zoneTimerElement.textContent = `Zona: ${this.safeZone.timer}s`;
+            } else {
+                zoneTimerElement.textContent = 'ZONA DIMINUINDO!';
+                zoneTimerElement.style.color = '#ff4444';
             }
         }
-
-        if (this.spectatorMode) {
-            if (e.code === 'ArrowLeft') this.switchSpectatorTarget(-1);
-            else if (e.code === 'ArrowRight') this.switchSpectatorTarget(1);
-        }
     }
 
-    // Métodos para gerenciar outros jogadores
-    addPlayer(playerData) {
-        const otherPlayer = new Player(playerData.x, playerData.y);
-        otherPlayer.id = playerData.id;
-        otherPlayer.name = playerData.name;
-        otherPlayer.setSkin(playerData.skin);
-        this.otherPlayers.set(playerData.id, otherPlayer);
+    startGameLoop() {
+        const loop = () => {
+            if (!this.isGameOver) {
+                this.frameCount++;
+                this.update();
+                this.render();
+                this.gameLoopId = requestAnimationFrame(loop);
+            }
+        };
+        loop();
+    }
+
+    addPlayer(playerId, data) {
+        this.players.set(playerId, {
+            id: playerId,
+            x: data.x,
+            y: data.y,
+            name: data.name,
+            health: data.health,
+            score: data.score,
+            kills: data.kills,
+            radius: 20
+        });
     }
 
     removePlayer(playerId) {
-        this.otherPlayers.delete(playerId);
+        this.players.delete(playerId);
     }
 
-    updatePlayerPosition(playerId, position) {
-        const player = this.otherPlayers.get(playerId);
+    updatePlayer(playerId, data) {
+        const player = this.players.get(playerId);
         if (player) {
-            player.x = position.x;
-            player.y = position.y;
-            player.targetAngle = position.angle;
+            Object.assign(player, data);
         }
     }
 
-    startOfflineGame() {
-        Logger.info('Iniciando jogo offline');
-        this.isMultiplayer = false;
-        this.gameState = 'playing';
-        this.gameStarted = true;
-        
-        // Adicionar bots
-        const numBots = this.TOTAL_PLAYERS - 1;
-        this.botManager = new BotManager(numBots, this.canvas);
-        
-        // Iniciar elementos do jogo
-        if (this.ui) {
-            this.ui.hideWaitingScreen();
-            this.ui.showGameElements();
-        }
-        
-        // Iniciar sistemas
-        this.safeZone.reset();
-        if (this.lootManager) {
-            this.lootManager.startLootSpawning();
-        }
+    addBullet(data) {
+        this.bullets.push({
+            ...data,
+            lifetime: 60,
+            radius: 5
+        });
     }
 
-    updatePlayer() {
-        if (!this.player || !this.player.isAlive) return;
-        
-        this.player.update(this.mouse, this.canvas, this.safeZone);
-        this.handlePlayerShooting();
-        
-        // Enviar atualizações para o servidor
-        if (this.network) {
-            this.network.updatePosition();
+    destroy() {
+        this.isGameOver = true;
+        if (this.gameLoopId) {
+            cancelAnimationFrame(this.gameLoopId);
+            this.gameLoopId = null;
         }
-        
-        if (this.ui) {
-            this.ui.updateHealth(this.player.health);
-            this.ui.updateAmmo(this.player.ammo);
-            this.ui.updateShield(this.player);
-            this.ui.updateMedkit(this.player);
+        if (this.networkManager) {
+            this.networkManager.disconnect();
         }
-    }
-
-    setupTouchControls() {
-        if (!this.isTouchDevice) return;
-
-        let isDragging = false;
-        let lastTouch = null;
-
-        this.canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            isDragging = true;
-            this.touchStartPos = {
-                x: touch.clientX,
-                y: touch.clientY
-            };
-            lastTouch = touch;
-
-            const rect = this.canvas.getBoundingClientRect();
-            this.mouse = {
-                x: touch.clientX - rect.left,
-                y: touch.clientY - rect.top
-            };
-        });
-
-        this.canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            lastTouch = touch;
-            
-            const rect = this.canvas.getBoundingClientRect();
-            this.mouse = {
-                x: touch.clientX - rect.left,
-                y: touch.clientY - rect.top
-            };
-        });
-
-        this.canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isDragging = false;
-            lastTouch = null;
-            if (this.player) {
-                this.player.velocity.x *= 0.5;
-                this.player.velocity.y *= 0.5;
-            }
-        });
     }
 }

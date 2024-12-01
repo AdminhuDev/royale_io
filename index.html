@@ -2,9 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Royale.io</title>
     <link rel="stylesheet" href="css/styles.css">
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
@@ -13,26 +11,55 @@
     <div id="particles-js"></div>
     
     <!-- Canvas do Jogo -->
-    <canvas id="gameCanvas" style="display: none;"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <!-- Tela Inicial -->
-    <div id="start-screen" class="start-screen" style="display: flex;">
+    <div id="start-screen" class="start-screen">
         <h1>Royale.io</h1>
         <div class="menu-container">
             <div class="name-input">
                 <input type="text" id="player-name-input" placeholder="Digite seu nome" maxlength="15">
             </div>
-            <div id="start-screen-score" class="score-display">Pontuação: 0</div>
+            <div class="stats-container">
+                <div class="stats-header">Estatísticas</div>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-label">Recorde</div>
+                        <div id="high-score-value" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Última Pontuação</div>
+                        <div id="last-score-value" class="stat-value">0</div>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-label">Total de Kills</div>
+                        <div id="total-kills-value" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Vitórias</div>
+                        <div id="wins-value" class="stat-value">0</div>
+                    </div>
+                </div>
+            </div>
             <div class="button-group">
                 <button id="start-game-button" class="game-button">Iniciar Jogo</button>
-                <button id="open-skins-button" class="game-button secondary">Skins</button>
                 <button id="tutorial-button" class="game-button secondary">Tutorial</button>
             </div>
         </div>
     </div>
 
+    <!-- Tela de Espera -->
+    <div id="waiting-screen" class="waiting-screen">
+        <h2>Aguardando Jogadores</h2>
+        <div class="loading-spinner"></div>
+        <p>A partida começará em <span id="countdown">15</span> segundos</p>
+        <p class="waiting-info">Aguardando mais jogadores...</p>
+    </div>
+
     <!-- Tutorial -->
-    <div id="tutorial-screen" class="tutorial-screen" style="display: none;">
+    <div id="tutorial-screen" class="tutorial-screen">
         <div class="tutorial-content">
             <h2>Como Jogar</h2>
             <div class="tutorial-items">
@@ -61,117 +88,70 @@
         </div>
     </div>
 
-    <!-- Status do Jogo -->
-    <div class="zone-info" style="display: none;">
-        <div id="safe-zone-timer" class="zone-timer">ÁREA DIMINUINDO EM: 60s</div>
-        <div id="players-alive-top" class="players-alive-top">JOGADORES: 10</div>
-    </div>
-    
-    <!-- Tela de Espera -->
-    <div id="waiting-screen" class="waiting-screen" style="display: none;">
-        <h2>Aguardando...</h2>
-        <div class="loading-spinner"></div>
-        <p>A partida começará em até <span id="countdown">15</span> segundos</p>
-        <p class="waiting-info">Aguardando mais jogadores...</p>
-    </div>
-
-    <div id="death-choice" class="death-choice" style="display: none;">
-        <div class="death-choice-content">
-            <h2 id="death-message" style="color: #FF453A; text-shadow: 0 0 20px rgba(255, 69, 58, 0.5);">SE FODEU!</h2>
-            <div class="stats-summary">
+    <!-- UI do Jogo -->
+    <div id="game-ui" class="game-ui">
+        <div class="top-info">
+            <div id="players-alive" class="players-alive">Jogadores: 10</div>
+            <div id="zone-timer" class="zone-timer">Zona: 60s</div>
+        </div>
+        <div class="player-stats">
+            <div class="stat-group">
                 <div class="stat-item">
-                    <span class="stat-label">Pontuação</span>
-                    <span id="death-score" class="stat-value">0</span>
+                    <span id="health" class="stat-value">100</span>
+                    <span class="stat-label">VIDA</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Sobrevivência</span>
-                    <span id="death-time" class="stat-value">0:00</span>
+                    <span id="shield" class="stat-value">100</span>
+                    <span class="stat-label">ESCUDO</span>
                 </div>
             </div>
-            <div class="death-choice-buttons">
-                <button id="back-button" class="game-button secondary">Voltar ao Menu</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Atualizar estrutura da UI do jogador -->
-    <div id="ui" class="player-ui" style="display: none;">
-        <div class="player-stats">
-            <div class="stat-item">
-                <span id="health" class="stat-value">100</span>
-                <span class="stat-label">VIDA</span>
-            </div>
-            <div class="stat-item">
-                <span id="ammo-count" class="stat-value">30</span>
-                <span class="stat-label">MUNIÇÃO</span>
-            </div>
-            <div class="stat-item score">
-                <span id="score" class="stat-value">0</span>
-                <span class="stat-label">PONTOS</span>
-            </div>
-        </div>
-        <!-- Habilidades agora são mostradas apenas em desktop -->
-        <div class="player-abilities desktop-only">
-            <div class="ability-item">
-                <div id="shield-container">
-                    <div id="shield-progress"><div></div></div>
-                    <span id="shield-status" class="ability-label">ESCUDO</span>
-                    <span class="key-hint">ESPAÇO</span>
+            <div class="stat-group">
+                <div class="stat-item">
+                    <span id="ammo" class="stat-value">30</span>
+                    <span class="stat-label">MUNIÇÃO</span>
+                </div>
+                <div class="stat-item">
+                    <span id="score" class="stat-value">0</span>
+                    <span class="stat-label">PONTOS</span>
                 </div>
             </div>
-            <div class="ability-item">
-                <div id="medkit-container">
-                    <div id="medkit-progress"><div></div></div>
-                    <span id="medkit-status" class="ability-label">MEDKIT</span>
-                    <span class="key-hint">E</span>
+        </div>
+        <div class="ability-bar">
+            <div class="ability">
+                <div id="shield-cooldown" class="cooldown-overlay"></div>
+                <span class="key-hint">ESPAÇO</span>
+                <span class="ability-name">Escudo</span>
+            </div>
+            <div class="ability">
+                <div id="medkit-cooldown" class="cooldown-overlay"></div>
+                <span class="key-hint">E</span>
+                <span class="ability-name">Medkit</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="game-over" class="game-over">
+        <div class="game-over-content">
+            <h2>Game Over</h2>
+            <div class="final-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Pontuação Final</span>
+                    <span id="final-score" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Kills</span>
+                    <span id="final-kills" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tempo de Jogo</span>
+                    <span id="final-time" class="stat-value">0:00</span>
                 </div>
             </div>
-            <div class="ability-item performance">
-                <div id="fps" class="stat-value">60 FPS</div>
-                <div id="ping" class="stat-value">17ms</div>
+            <div class="button-group">
+                <button id="play-again" class="game-button">Jogar Novamente</button>
+                <button id="back-to-menu" class="game-button secondary">Menu Principal</button>
             </div>
-        </div>
-    </div>
-
-    <!-- Customização -->
-    <div id="skin-selector" class="skin-selector" style="display: none;">
-        <div class="skin-header">
-            <span class="header-label">SKINS</span>
-            <button class="close-button">&times;</button>
-        </div>
-        <div class="skin-grid">
-            <!-- Skins serão adicionadas via JavaScript -->
-        </div>
-    </div>
-
-    <!-- Atualizar estrutura dos controles mobile -->
-    <div class="mobile-controls">
-        <div class="mobile-abilities">
-            <button id="shield-button" class="ability-button shield">🛡️</button>
-            <button id="medkit-button" class="ability-button medkit">❤️</button>
-        </div>
-        <button id="shoot-button" class="shoot-button">🎯</button>
-    </div>
-
-    <!-- Adicionar container para UI do topo -->
-    <div class="top-ui-container">
-        <div class="player-stats">
-            <div class="stat-item">
-                <span id="health" class="stat-value">100</span>
-                <span class="stat-label">VIDA</span>
-            </div>
-            <div class="stat-item">
-                <span id="ammo-count" class="stat-value">30</span>
-                <span class="stat-label">MUNIÇÃO</span>
-            </div>
-            <div class="stat-item score">
-                <span id="score" class="stat-value">0</span>
-                <span class="stat-label">PONTOS</span>
-            </div>
-        </div>
-        <div class="zone-info">
-            <div id="safe-zone-timer" class="zone-timer">ÁREA DIMINUINDO EM: 60s</div>
-            <div id="players-alive-top" class="players-alive-top">JOGADORES: 10</div>
         </div>
     </div>
 

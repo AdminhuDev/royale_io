@@ -1,183 +1,131 @@
 import { Game } from './Game.js';
 import { Logger } from './Logger.js';
 
-window.DEBUG_MODE = location.hostname === 'localhost';
-
 document.addEventListener('DOMContentLoaded', () => {
-    Logger.info('Inicializando aplicação');
     try {
-        // Elementos principais
+        // Elementos da UI
         const canvas = document.getElementById('gameCanvas');
         const startScreen = document.getElementById('start-screen');
+        const startButton = document.getElementById('start-game-button');
         const playerNameInput = document.getElementById('player-name-input');
-        const startGameButton = document.getElementById('start-game-button');
-        const openSkinsButton = document.getElementById('open-skins-button');
+        const waitingScreen = document.getElementById('waiting-screen');
+        const gameUI = document.getElementById('game-ui');
+        const gameOver = document.getElementById('game-over');
+        const playAgainButton = document.getElementById('play-again');
+        const backToMenuButton = document.getElementById('back-to-menu');
+
+        if (!canvas || !startScreen || !startButton || !playerNameInput) {
+            throw new Error('Elementos essenciais não encontrados');
+        }
+
+        // Configurar canvas
+        canvas.style.display = 'none';
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Event Listeners
+        startButton.addEventListener('click', startNewGame);
+
+        // Botões do Game Over
+        if (playAgainButton) {
+            playAgainButton.addEventListener('click', () => {
+                if (window.game) {
+                    window.game.destroy();
+                }
+                hideAllScreens();
+                startNewGame();
+            });
+        }
+
+        if (backToMenuButton) {
+            backToMenuButton.addEventListener('click', () => {
+                if (window.game) {
+                    window.game.destroy();
+                }
+                hideAllScreens();
+                showStartScreen();
+            });
+        }
+
+        // Tutorial
         const tutorialButton = document.getElementById('tutorial-button');
         const tutorialScreen = document.getElementById('tutorial-screen');
         const closeTutorialButton = document.getElementById('close-tutorial');
-        const deathChoice = document.getElementById('death-choice');
-        const ui = document.getElementById('ui');
-        const startScreenScore = document.getElementById('start-screen-score');
-        const zoneInfo = document.querySelector('.zone-info');
-        
-        if (!canvas || !startScreen || !playerNameInput || !startGameButton) {
-            throw new Error('Elementos necessários não encontrados');
+
+        if (tutorialButton && tutorialScreen && closeTutorialButton) {
+            tutorialButton.addEventListener('click', () => {
+                tutorialScreen.style.display = 'flex';
+            });
+
+            closeTutorialButton.addEventListener('click', () => {
+                tutorialScreen.style.display = 'none';
+            });
         }
 
-        // Configuração inicial
-        setupInitialState();
-        setupEventListeners();
-        initializeParticles();
-
-        function setupInitialState() {
-            canvas.style.display = 'none';
-            startScreen.style.display = 'flex';
-            if (deathChoice) deathChoice.style.display = 'none';
-            if (ui) ui.style.display = 'none';
-            if (zoneInfo) zoneInfo.style.display = 'none';
-            if (tutorialScreen) tutorialScreen.style.display = 'none';
+        function hideAllScreens() {
+            const screens = [
+                gameOver,
+                startScreen,
+                waitingScreen,
+                gameUI,
+                canvas
+            ];
             
-            // Atualizar texto do waiting screen
-            const waitingScreen = document.getElementById('waiting-screen');
-            const countdownElement = document.getElementById('countdown');
-            if (waitingScreen && countdownElement) {
-                countdownElement.textContent = '15'; // Atualizado para 15 segundos
-            }
-            
-            // Carregar dados salvos
-            loadSavedData();
+            screens.forEach(screen => {
+                if (screen) {
+                    screen.style.display = 'none';
+                }
+            });
         }
 
-        function loadSavedData() {
-            const savedScore = localStorage.getItem('playerScore');
-            if (savedScore && startScreenScore) {
-                startScreenScore.textContent = `Pontuação: ${savedScore}`;
-            }
-            
-            const savedName = localStorage.getItem('playerName');
-            if (savedName) {
-                playerNameInput.value = savedName;
-            }
-        }
-
-        function setupEventListeners() {
-            // Evento de início de jogo
-            startGameButton.addEventListener('click', handleGameStart);
-            
-            // Eventos de input
-            playerNameInput.addEventListener('keypress', handleEnterKey);
-            
-            // Eventos do tutorial
-            if (tutorialButton) {
-                tutorialButton.addEventListener('click', () => {
-                    tutorialScreen.style.display = 'flex';
-                });
-            }
-            
-            if (closeTutorialButton) {
-                closeTutorialButton.addEventListener('click', () => {
-                    tutorialScreen.style.display = 'none';
-                });
-            }
-            
-            // Evento do botão de skins
-            if (openSkinsButton) {
-                openSkinsButton.addEventListener('click', () => {
-                    const skinSelector = document.getElementById('skin-selector');
-                    if (skinSelector) {
-                        skinSelector.style.display = 'block';
-                    }
-                });
-            }
-
-            // Atalhos de teclado globais
-            document.addEventListener('keydown', handleKeyboardShortcuts);
-        }
-
-        function handleGameStart() {
+        function startNewGame() {
             const playerName = playerNameInput.value.trim();
             if (!playerName) {
-                Logger.warn('Tentativa de iniciar jogo sem nome');
-                showInputError();
+                showInputError(playerNameInput);
                 return;
             }
 
-            Logger.info('Iniciando novo jogo', { playerName });
             localStorage.setItem('playerName', playerName);
+            hideAllScreens();
+            waitingScreen.style.display = 'flex';
             
-            try {
-                cleanupPreviousGame();
-                showGameElements();
-                createNewGame();
-
-                // Atualizar texto inicial do waiting screen
-                const waitingScreen = document.getElementById('waiting-screen');
-                if (waitingScreen) {
-                    const countdownElement = waitingScreen.querySelector('#countdown');
-                    if (countdownElement) {
-                        countdownElement.textContent = '15'; // Atualizado para 15 segundos
-                    }
-                }
-            } catch (error) {
-                Logger.error('Erro ao iniciar jogo', error);
-                handleGameStartError();
-            }
-        }
-
-        function showInputError() {
-            playerNameInput.classList.add('shake');
-            setTimeout(() => playerNameInput.classList.remove('shake'), 500);
-        }
-
-        function cleanupPreviousGame() {
+            // Limpar jogo anterior se existir
             if (window.game) {
-                Logger.info('Destruindo jogo anterior');
-                window.game.destroy();
+                // Remover eventos do mouse antigos
+                canvas.removeEventListener('mousemove', window.handleMouseMove);
+                canvas.removeEventListener('click', window.handleClick);
                 window.game = null;
             }
+            
+            // Criar nova instância do jogo
+            window.game = new Game();
+
+            // Adicionar eventos do mouse
+            setupMouseEvents(canvas);
+
+            // Iniciar contagem
+            startCountdown(3);
         }
 
-        function showGameElements() {
-            startScreen.style.display = 'none';
-            canvas.style.display = 'block';
-            if (ui) ui.style.display = 'flex';
-            if (zoneInfo) zoneInfo.style.display = 'flex';
-        }
-
-        function createNewGame() {
-            try {
-                window.game = new Game();
-                Logger.info('Jogo criado com sucesso');
-            } catch (error) {
-                throw new Error(`Falha ao criar jogo: ${error.message}`);
-            }
-        }
-
-        function handleGameStartError() {
-            alert('Erro ao iniciar o jogo. Por favor, recarregue a página.');
+        function showStartScreen() {
+            hideAllScreens();
             startScreen.style.display = 'flex';
-            canvas.style.display = 'none';
-            if (ui) ui.style.display = 'none';
-            if (zoneInfo) zoneInfo.style.display = 'none';
-        }
-
-        function handleEnterKey(e) {
-            if (e.key === 'Enter') {
-                startGameButton.click();
+            
+            // Limpar jogo se existir
+            if (window.game) {
+                canvas.removeEventListener('mousemove', window.handleMouseMove);
+                canvas.removeEventListener('click', window.handleClick);
+                window.game = null;
             }
-        }
 
-        function handleKeyboardShortcuts(e) {
-            if (e.key === 'Escape') {
-                const tutorialScreen = document.getElementById('tutorial-screen');
-                const skinSelector = document.getElementById('skin-selector');
-                
-                if (tutorialScreen?.style.display === 'flex') {
-                    tutorialScreen.style.display = 'none';
-                }
-                if (skinSelector?.style.display === 'block') {
-                    skinSelector.style.display = 'none';
-                }
+            // Resetar input do nome se necessário
+            if (playerNameInput.value.trim() === '') {
+                playerNameInput.value = localStorage.getItem('playerName') || '';
             }
         }
 
@@ -185,109 +133,62 @@ document.addEventListener('DOMContentLoaded', () => {
         Logger.error('Erro na inicialização da aplicação', error);
         alert('Erro ao iniciar o jogo. Por favor, recarregue a página.');
     }
-
-    // Configuração das partículas
-    initializeParticles();
 });
 
-function initializeParticles() {
-    particlesJS('particles-js', {
-        particles: {
-            number: { value: 80, density: { enable: true, value_area: 800 } },
-            color: { value: '#0A84FF' },
-            shape: { type: 'circle' },
-            opacity: {
-                value: 0.5,
-                random: true,
-                animation: {
-                    enable: true,
-                    speed: 1,
-                    opacity_min: 0.1,
-                    sync: false
-                }
-            },
-            size: {
-                value: 3,
-                random: true,
-                animation: {
-                    enable: true,
-                    speed: 2,
-                    size_min: 0.1,
-                    sync: false
-                }
-            },
-            line_linked: {
-                enable: true,
-                distance: 150,
-                color: '#0A84FF',
-                opacity: 0.4,
-                width: 1
-            },
-            move: {
-                enable: true,
-                speed: 2,
-                direction: 'none',
-                random: true,
-                straight: false,
-                out_mode: 'out',
-                bounce: false,
-            }
-        },
-        interactivity: {
-            detect_on: 'canvas',
-            events: {
-                onhover: { enable: true, mode: 'grab' },
-                onclick: { enable: true, mode: 'push' },
-                resize: true
-            },
-            modes: {
-                grab: {
-                    distance: 140,
-                    line_linked: { opacity: 0.8 }
-                },
-                push: { particles_nb: 4 }
-            }
-        },
-        retina_detect: true
-    });
+function setupMouseEvents(canvas) {
+    window.handleMouseMove = function(e) {
+        if (!window.game || !window.game.camera) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const screenX = (e.clientX - rect.left) * scaleX;
+        const screenY = (e.clientY - rect.top) * scaleY;
+        
+        const worldPos = window.game.camera.screenToWorld(screenX, screenY);
+        window.game.mouseX = worldPos.x;
+        window.game.mouseY = worldPos.y;
+    };
+
+    window.handleClick = function(e) {
+        if (window.game && window.game.localPlayer && window.game.localPlayer.health > 0) {
+            window.game.shoot();
+        }
+    };
+
+    canvas.addEventListener('mousemove', window.handleMouseMove);
+    canvas.addEventListener('click', window.handleClick);
 }
 
-// Funções globais
-window.resetGame = () => {
-    if (window.game) {
-        const elements = {
-            deathChoice: document.getElementById('death-choice'),
-            startScreen: document.getElementById('start-screen'),
-            canvas: document.getElementById('gameCanvas'),
-            ui: document.getElementById('ui'),
-            zoneInfo: document.querySelector('.zone-info')
-        };
-        
-        // Atualizar visibilidade dos elementos
-        Object.entries(elements).forEach(([key, element]) => {
-            if (element) {
-                element.style.display = 
-                    key === 'canvas' ? 'block' :
-                    key === 'ui' || key === 'zoneInfo' ? 'flex' : 'none';
-            }
-        });
-        
-        window.game.startNewGame();
-    }
-};
+function showInputError(input) {
+    input.classList.add('error');
+    setTimeout(() => input.classList.remove('error'), 500);
+}
 
-window.cleanupGame = () => {
-    if (window.game) {
-        try {
-            window.game.destroy();
-            window.game = null;
-            Logger.info('Jogo destruído com sucesso');
-        } catch (error) {
-            Logger.error('Erro ao destruir jogo', error);
+function startCountdown(seconds) {
+    const countdownElement = document.getElementById('countdown');
+    if (!countdownElement) return;
+
+    let timeLeft = seconds;
+    countdownElement.textContent = timeLeft;
+
+    const countdownInterval = setInterval(() => {
+        timeLeft--;
+        countdownElement.textContent = timeLeft;
+
+        if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            startGame();
         }
-    }
-};
+    }, 1000);
+}
 
-window.addEventListener('beforeunload', () => {
-    window.cleanupGame();
-});
+function startGame() {
+    const waitingScreen = document.getElementById('waiting-screen');
+    const gameUI = document.getElementById('game-ui');
+    const canvas = document.getElementById('gameCanvas');
+
+    if (waitingScreen) waitingScreen.style.display = 'none';
+    if (gameUI) gameUI.style.display = 'flex';
+    if (canvas) canvas.style.display = 'block';
+}
