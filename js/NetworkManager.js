@@ -33,8 +33,12 @@ export class NetworkManager {
         };
 
         this.socket.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            this.handleMessage(message);
+            try {
+                const message = JSON.parse(event.data);
+                this.handleMessage(message);
+            } catch (error) {
+                console.error('Erro ao processar mensagem:', error);
+            }
         };
     }
 
@@ -86,8 +90,8 @@ export class NetworkManager {
                 x: this.game.localPlayer.x,
                 y: this.game.localPlayer.y,
                 health: this.game.localPlayer.health,
-                score: 0,
-                kills: 0
+                score: this.game.localPlayer.score,
+                kills: this.game.localPlayer.kills
             }
         });
     }
@@ -100,7 +104,9 @@ export class NetworkManager {
             data: {
                 x: this.game.localPlayer.x,
                 y: this.game.localPlayer.y,
-                health: this.game.localPlayer.health
+                health: this.game.localPlayer.health,
+                score: this.game.localPlayer.score,
+                kills: this.game.localPlayer.kills
             }
         });
     }

@@ -46,15 +46,6 @@ export class Loot {
         ctx.closePath();
     }
 
-    collect(player) {
-        if (this.type === 'medkit') {
-            player.health = Math.min(100, player.health + 50);
-        } else if (this.type === 'ammo') {
-            player.ammo += 30;
-        }
-        this.collected = true;
-    }
-
     isColliding(player) {
         const dx = player.x - this.x;
         const dy = player.y - this.y;

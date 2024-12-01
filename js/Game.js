@@ -1,6 +1,7 @@
 import { LootManager } from './LootManager.js';
 import { Camera } from './Camera.js';
 import { NetworkManager } from './NetworkManager.js';
+import { Player } from './Player.js';
 
 export class Game {
     setupCanvas() {
@@ -19,6 +20,9 @@ export class Game {
             // Ajustar contexto para pixel ratio
             this.ctx.scale(pixelRatio, pixelRatio);
         };
+
+        // Ocultar cursor do mouse
+        this.canvas.style.cursor = 'none';
 
         updateCanvasSize();
         window.addEventListener('resize', updateCanvasSize);
@@ -68,17 +72,21 @@ export class Game {
     }
 
     setupEvents() {
+        // Armazenar a última posição do mouse em coordenadas da tela
+        this.lastScreenX = 0;
+        this.lastScreenY = 0;
+
         this.canvas.addEventListener('mousemove', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
             
-            const screenX = (e.clientX - rect.left) * scaleX;
-            const screenY = (e.clientY - rect.top) * scaleY;
+            // Armazenar coordenadas da tela
+            this.lastScreenX = (e.clientX - rect.left) * scaleX;
+            this.lastScreenY = (e.clientY - rect.top) * scaleY;
             
-            const worldPos = this.camera.screenToWorld(screenX, screenY);
-            this.mouseX = worldPos.x;
-            this.mouseY = worldPos.y;
+            // Atualizar coordenadas do mundo
+            this.updateMouseWorldPosition();
         });
 
         this.canvas.addEventListener('click', (e) => {
@@ -88,72 +96,41 @@ export class Game {
         });
     }
 
+    // Novo método para atualizar a posição do mouse no mundo
+    updateMouseWorldPosition() {
+        const worldPos = this.camera.screenToWorld(this.lastScreenX, this.lastScreenY);
+        this.mouseX = worldPos.x;
+        this.mouseY = worldPos.y;
+    }
+
     createPlayer() {
-        const playerName = localStorage.getItem('playerName') || 'Player';
-        this.localPlayer = {
-            x: 1500, // Começa no centro do mundo
-            y: 1500,
-            radius: 20,
-            speed: 5,
-            name: playerName,
-            health: 100,
-            ammo: 30
-        };
+        this.localPlayer = new Player();
     }
 
     movePlayer() {
         if (!this.localPlayer) return;
+        this.localPlayer.move(this.mouseX, this.mouseY, this.worldWidth, this.worldHeight);
+    }
 
-        const dx = this.mouseX - this.localPlayer.x;
-        const dy = this.mouseY - this.localPlayer.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+    shoot() {
+        if (!this.localPlayer || this.localPlayer.health <= 0) return;
 
-        if (distance > 5) {
-            const speed = this.localPlayer.speed;
-            const dirX = (dx / distance) * speed;
-            const dirY = (dy / distance) * speed;
-
-            // Verificar limites do mundo
-            const newX = this.localPlayer.x + dirX;
-            const newY = this.localPlayer.y + dirY;
-
-            if (newX >= this.localPlayer.radius && newX <= 3000 - this.localPlayer.radius) {
-                this.localPlayer.x = newX;
-            }
-            if (newY >= this.localPlayer.radius && newY <= 3000 - this.localPlayer.radius) {
-                this.localPlayer.y = newY;
+        const bullet = this.localPlayer.shoot(this.mouseX, this.mouseY);
+        if (bullet) {
+            this.bullets.push(bullet);
+            // Enviar tiro para o servidor
+            if (this.networkManager) {
+                this.networkManager.sendShoot(bullet);
             }
         }
     }
 
-    shoot() {
-        if (!this.localPlayer || this.localPlayer.ammo <= 0) return;
-
-        // Calcular direção do tiro
-        const dx = this.mouseX - this.localPlayer.x;
-        const dy = this.mouseY - this.localPlayer.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const dirX = dx / distance;
-        const dirY = dy / distance;
-
-        // Criar projétil
-        const bullet = {
-            x: this.localPlayer.x + dirX * (this.localPlayer.radius + 10),
-            y: this.localPlayer.y + dirY * (this.localPlayer.radius + 10),
-            dirX: dirX,
-            dirY: dirY,
-            speed: 15,
-            radius: 5,
-            damage: 10,
-            lifetime: 60
-        };
-
-        this.bullets.push(bullet);
-        this.localPlayer.ammo--;
-
-        // Enviar tiro para o servidor
-        if (this.networkManager) {
-            this.networkManager.sendShoot(bullet);
+    handleHit(damage) {
+        if (!this.localPlayer) return;
+        
+        const isDead = this.localPlayer.takeDamage(damage);
+        if (isDead) {
+            this.handleGameOver();
         }
     }
 
@@ -167,6 +144,9 @@ export class Game {
 
             // Verificar colisão com jogadores
             this.players.forEach((player, playerId) => {
+                // Não verificar colisão com o próprio jogador
+                if (playerId === this.networkManager.playerId) return;
+                
                 if (this.checkBulletCollision(bullet, player)) {
                     // Aplicar dano
                     player.health -= bullet.damage;
@@ -199,17 +179,6 @@ export class Game {
         return distance < player.radius + bullet.radius;
     }
 
-    handleHit(damage) {
-        if (!this.localPlayer) return;
-        
-        this.localPlayer.health -= damage;
-        
-        if (this.localPlayer.health <= 0) {
-            this.localPlayer.health = 0;
-            this.handleGameOver();
-        }
-    }
-
     updateSafeZone() {
         if (!this.safeZone.shrinking && this.frameCount % 60 === 0) {
             this.safeZone.timer--;
@@ -222,7 +191,8 @@ export class Game {
 
         if (this.safeZone.shrinking && this.safeZone.currentRadius > 0) {
             const shrinkProgress = 1 - (this.safeZone.currentRadius / this.safeZone.maxRadius);
-            this.safeZone.damage = 2 + (shrinkProgress * 8); // Aumentado o dano máximo
+            // Limitar dano entre 2 e 10 por segundo
+            this.safeZone.damage = Math.min(10, Math.max(2, 2 + (shrinkProgress * 8)));
             
             if (this.safeZone.currentRadius > this.safeZone.targetRadius) {
                 this.safeZone.currentRadius -= this.safeZone.shrinkSpeed;
@@ -230,8 +200,9 @@ export class Game {
                 this.safeZone.currentRadius -= this.safeZone.shrinkSpeed * 0.3;
             }
             
-            if (this.safeZone.currentRadius < 0) {
-                this.safeZone.currentRadius = 0;
+            // Garantir que a zona nunca fique menor que o raio mínimo
+            if (this.safeZone.currentRadius < 50) {
+                this.safeZone.currentRadius = 50;
             }
         }
 
@@ -241,7 +212,9 @@ export class Game {
             const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
             
             if (distanceFromCenter > this.safeZone.currentRadius) {
-                this.localPlayer.health -= this.safeZone.damage * (1/60);
+                // Aplicar dano com base na distância da zona
+                const distanceMultiplier = Math.min(2, (distanceFromCenter - this.safeZone.currentRadius) / 100);
+                this.localPlayer.health -= (this.safeZone.damage * distanceMultiplier) * (1/60);
                 
                 if (this.localPlayer.health <= 0) {
                     this.localPlayer.health = 0;
@@ -296,6 +269,9 @@ export class Game {
         this.updateSafeZone();
         this.lootManager.update();
         this.camera.update();
+        
+        // Atualizar posição do mouse no mundo a cada frame
+        this.updateMouseWorldPosition();
 
         // Enviar posição para o servidor
         if (this.networkManager && this.localPlayer) {
@@ -312,89 +288,79 @@ export class Game {
         this.camera.begin(this.ctx);
 
         // Desenhar grade de fundo
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        const gridSize = 100;
-        for (let x = 0; x <= 3000; x += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, 3000);
-            this.ctx.stroke();
-        }
-        for (let y = 0; y <= 3000; y += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(3000, y);
-            this.ctx.stroke();
-        }
-
-        // Desenhar borda do mundo
-        this.ctx.strokeStyle = '#ff0000';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(0, 0, 3000, 3000);
+        this.renderGrid();
 
         // Desenhar zona segura
-        this.ctx.beginPath();
-        this.ctx.arc(1500, 1500, this.safeZone.currentRadius, 0, Math.PI * 2);
-        this.ctx.strokeStyle = '#4CAF50';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
-
-        // Área fora da zona
-        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-        this.ctx.fillRect(0, 0, 3000, 3000);
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.arc(1500, 1500, this.safeZone.currentRadius, 0, Math.PI * 2);
-        this.ctx.clip();
-        this.ctx.clearRect(0, 0, 3000, 3000);
-        this.ctx.restore();
+        this.renderSafeZone();
 
         // Desenhar loots
         this.lootManager.render(this.ctx);
 
         // Desenhar outros jogadores
         this.players.forEach(player => {
-            // Corpo do jogador
-            this.ctx.beginPath();
-            this.ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-            this.ctx.fillStyle = '#ff4444';
-            this.ctx.fill();
-            this.ctx.closePath();
-
-            // Nome do jogador
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '14px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(
-                player.name,
-                player.x,
-                player.y - player.radius - 10
-            );
-
-            // Barra de vida
-            const healthBarWidth = 40;
-            const healthBarHeight = 4;
-            const healthPercentage = player.health / 100;
-            
-            this.ctx.fillStyle = '#333';
-            this.ctx.fillRect(
-                player.x - healthBarWidth/2,
-                player.y - player.radius - 20,
-                healthBarWidth,
-                healthBarHeight
-            );
-            
-            this.ctx.fillStyle = '#4CAF50';
-            this.ctx.fillRect(
-                player.x - healthBarWidth/2,
-                player.y - player.radius - 20,
-                healthBarWidth * healthPercentage,
-                healthBarHeight
-            );
+            player.render(this.ctx);
         });
 
         // Desenhar projéteis
+        this.renderBullets();
+
+        // Desenhar jogador local
+        if (this.localPlayer) {
+            this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true);
+        }
+
+        // Terminar transformação da câmera
+        this.camera.end(this.ctx);
+
+        // UI (fora da transformação da câmera)
+        this.updateUI();
+    }
+
+    renderGrid() {
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.lineWidth = 1;
+        const gridSize = 100;
+        
+        for (let x = 0; x <= this.worldWidth; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.worldHeight);
+            this.ctx.stroke();
+        }
+        
+        for (let y = 0; y <= this.worldHeight; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.worldWidth, y);
+            this.ctx.stroke();
+        }
+
+        // Borda do mundo
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(0, 0, this.worldWidth, this.worldHeight);
+    }
+
+    renderSafeZone() {
+        // Desenhar círculo da zona segura
+        this.ctx.beginPath();
+        this.ctx.arc(this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius, 0, Math.PI * 2);
+        this.ctx.strokeStyle = '#4CAF50';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // Área fora da zona
+        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        this.ctx.fillRect(0, 0, this.worldWidth, this.worldHeight);
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius, 0, Math.PI * 2);
+        this.ctx.clip();
+        this.ctx.clearRect(0, 0, this.worldWidth, this.worldHeight);
+        this.ctx.restore();
+    }
+
+    renderBullets() {
         for (const bullet of this.bullets) {
             this.ctx.beginPath();
             this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
@@ -411,46 +377,6 @@ export class Game {
             this.ctx.stroke();
             this.ctx.closePath();
         }
-
-        // Desenhar jogador local
-        if (this.localPlayer) {
-            // Corpo do jogador
-            this.ctx.beginPath();
-            this.ctx.arc(
-                this.localPlayer.x,
-                this.localPlayer.y,
-                this.localPlayer.radius,
-                0,
-                Math.PI * 2
-            );
-            this.ctx.fillStyle = '#fff';
-            this.ctx.fill();
-            this.ctx.closePath();
-
-            // Nome do jogador
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '14px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(
-                this.localPlayer.name,
-                this.localPlayer.x,
-                this.localPlayer.y - this.localPlayer.radius - 10
-            );
-
-            // Linha de mira
-            this.ctx.beginPath();
-            this.ctx.moveTo(this.localPlayer.x, this.localPlayer.y);
-            this.ctx.lineTo(this.mouseX, this.mouseY);
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            this.ctx.stroke();
-            this.ctx.closePath();
-        }
-
-        // Terminar transformação da câmera
-        this.camera.end(this.ctx);
-
-        // UI (fora da transformação da câmera)
-        this.updateUI();
     }
 
     updateUI() {
@@ -488,16 +414,12 @@ export class Game {
     }
 
     addPlayer(playerId, data) {
-        this.players.set(playerId, {
-            id: playerId,
-            x: data.x,
-            y: data.y,
-            name: data.name,
-            health: data.health,
-            score: data.score,
-            kills: data.kills,
-            radius: 20
-        });
+        const player = new Player(data.x, data.y);
+        player.name = data.name;
+        player.health = data.health;
+        player.score = data.score;
+        player.kills = data.kills;
+        this.players.set(playerId, player);
     }
 
     removePlayer(playerId) {

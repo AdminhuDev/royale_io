@@ -27,10 +27,15 @@ export class LootManager {
             loot.update();
             
             // Verificar coleta
-            if (this.game.localPlayer && !loot.collected) {
+            if (this.game.localPlayer) {
                 if (loot.isColliding(this.game.localPlayer)) {
-                    loot.collect(this.game.localPlayer);
+                    if (loot.type === 'medkit') {
+                        this.game.localPlayer.heal(50);
+                    } else if (loot.type === 'ammo') {
+                        this.game.localPlayer.addAmmo(30);
+                    }
                     this.loots.splice(i, 1);
+                    continue;
                 }
             }
 
