@@ -1,25 +1,49 @@
-# Royale.io
+# 🎮 Royale.io
 
-Um jogo multiplayer em tempo real baseado em navegador, inspirado em jogos battle royale.
+Um jogo battle royale espacial multiplayer em tempo real, onde você luta pela sobrevivência em um ambiente espacial dinâmico.
 
-## Características
+![Royale.io Banner](assets/banner.png)
 
-- Jogabilidade multiplayer em tempo real
-- Sistema de zona que diminui
-- Sistema de combate com tiros
-- Sistema de loots
-- Barra de vida e munição
-- Suporte a vários jogadores simultâneos
+## 🌟 Características
 
-## Tecnologias
+- 🎯 Combate espacial em tempo real
+- 🛡️ Sistema de escudos e habilidades únicas
+- 🎨 Skins personalizadas com efeitos visuais incríveis:
+  - Espírito Lunar: Aura mística com estrelas orbitantes
+  - Chama Infernal: Efeitos de fogo ardente
+  - Gelo Eterno: Cristais de gelo flutuantes
+  - Veneno Ancestral: Aura tóxica pulsante
+  - Relíquia Sagrada: Símbolos dourados místicos
+  - Prisma Dimensional: Efeitos de arco-íris dinâmicos
+- 🌌 Zona segura que diminui dinamicamente
+- 📦 Sistema de loots e power-ups
+- 🤖 Bots com IA avançada
+- 🏆 Sistema de ranking e conquistas
 
-- Node.js
-- Express
-- WebSocket (ws)
-- HTML5 Canvas
-- JavaScript (ES6+)
+## 🚀 Tecnologias
 
-## Como Executar Localmente
+- 🖥️ Frontend:
+  - HTML5 Canvas para renderização
+  - JavaScript ES6+ para lógica do jogo
+  - CSS3 para interface moderna
+- ⚙️ Backend:
+  - Node.js
+  - Express
+  - WebSocket (ws) para comunicação em tempo real
+- 🛠️ Ferramentas:
+  - Git para controle de versão
+  - NPM para gerenciamento de pacotes
+  - ESLint para qualidade de código
+
+## 🎮 Como Jogar
+
+1. Acesse: [royale.io](https://royale-io.onrender.com)
+2. Escolha seu nome e personalize seu personagem
+3. Use o mouse para mirar e atirar
+4. Tecla ESPAÇO para ativar escudo
+5. Colete power-ups e sobreviva!
+
+## 💻 Desenvolvimento Local
 
 1. Clone o repositório:
 ```bash
@@ -32,31 +56,59 @@ cd royale_io
 npm install
 ```
 
-3. Inicie o servidor:
-```bash
-npm start
-```
-
-4. Abra o navegador em `http://localhost:3000`
-
-## Deploy no Render
-
-1. Crie uma conta no [Render](https://render.com)
-2. Conecte seu repositório GitHub
-3. Crie um novo Web Service
-4. Configure as seguintes opções:
-   - Build Command: `npm install`
-   - Start Command: `npm start`
-   - Environment: `Node`
-   - Plan: Free
-
-## Desenvolvimento
-
-Para executar em modo desenvolvimento com recarga automática:
+3. Inicie em modo desenvolvimento:
 ```bash
 npm run dev
 ```
 
-## Licença
+4. Acesse `http://localhost:3000`
 
-ISC 
+## 🤝 Contribuindo
+
+Adoraríamos sua ajuda para melhorar o Royale.io! Você pode contribuir de várias formas:
+
+### 👨‍💻 Desenvolvimento
+- Reporte bugs
+- Sugira novas funcionalidades
+- Envie pull requests
+- Melhore a documentação
+
+### 🎨 Design
+- Crie novas skins
+- Desenvolva efeitos visuais
+- Melhore a interface do usuário
+
+### 🌟 Apoio
+- ⭐ Dê uma estrela no GitHub
+- 🎮 Compartilhe com amigos
+- 📝 Deixe feedback
+- 💰 Apoie financeiramente
+
+## 💖 Apoiadores
+
+Agradecemos a todos que apoiam o projeto! Você pode se tornar um apoiador através de:
+
+- 💳 [Buy Me a Coffee](https://buymeacoffee.com/adminhudev)
+- 💰 [Patreon](https://patreon.com/adminhudev)
+- 🎁 [PayPal](https://paypal.me/adminhudev)
+
+### 🏆 Apoiadores Atuais
+- Nível Lendário
+  - [Seu nome aqui]
+- Nível Épico
+  - [Seu nome aqui]
+- Nível Raro
+  - [Seu nome aqui]
+
+## 📜 Licença
+
+Este projeto está licenciado sob a [Licença ISC](LICENSE).
+
+## 📞 Contato
+
+- 📧 Email: adminhudev@gmail.com
+- 🐦 Twitter: [@adminhudev](https://twitter.com/adminhudev)
+- 💬 Discord: [Servidor Royale.io](https://discord.gg/royaleio)
+
+---
+Feito com ❤️ por [AdminhuDev](https://github.com/AdminhuDev) 
