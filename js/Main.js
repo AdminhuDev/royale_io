@@ -40,16 +40,24 @@ function initializeSkins() {
                 skinManager.selectSkin(skinId);
             } else {
                 // Verificar se tem pontos suficientes
-                const currentScore = parseInt(localStorage.getItem('lastScore') || '0');
-                if (currentScore >= skin.price) {
+                const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
+                const availablePoints = stats.highScore || 0;
+                
+                if (availablePoints >= skin.price) {
                     if (confirm(`Deseja comprar a skin ${skin.name} por ${skin.price} pontos?`)) {
-                        localStorage.setItem('lastScore', (currentScore - skin.price).toString());
+                        // Atualizar pontos disponíveis
+                        stats.highScore = availablePoints - skin.price;
+                        localStorage.setItem('gameStats', JSON.stringify(stats));
+                        
+                        // Desbloquear skin
                         skinManager.unlockSkin(skinId);
                         skinElement.classList.remove('locked');
-                        updateStats(); // Atualizar estatísticas na tela
+                        
+                        // Atualizar interface
+                        updateStats();
                     }
                 } else {
-                    alert(`Você precisa de ${skin.price} pontos para comprar esta skin!`);
+                    alert(`Você precisa de ${skin.price} pontos para comprar esta skin! (Você tem ${availablePoints} pontos)`);
                 }
             }
         });
