@@ -86,18 +86,16 @@ Adoraríamos sua ajuda para melhorar o Royale.io! Você pode contribuir de vári
 
 ## 💖 Apoiadores
 
-Agradecemos a todos que apoiam o projeto! Você pode se tornar um apoiador através de:
+Agradecemos a todos que apoiam o projeto! Você pode se tornar um apoiador através do PayPal:
 
-- 💳 [Buy Me a Coffee](https://buymeacoffee.com/adminhudev)
-- 💰 [Patreon](https://patreon.com/adminhudev)
-- 🎁 [PayPal](https://paypal.me/adminhudev)
+- 🎁 [Doar via PayPal](https://www.paypal.com/donate/?business=2KX84Y9DCRQ2U&no_recurring=0&item_name=Doa%C3%A7ao+Espontanea&currency_code=BRL)
 
 ### 🏆 Apoiadores Atuais
-- Nível Lendário
+- Nível Lendário (R$100+)
   - [Seu nome aqui]
-- Nível Épico
+- Nível Épico (R$50+)
   - [Seu nome aqui]
-- Nível Raro
+- Nível Raro (R$25+)
   - [Seu nome aqui]
 
 ## 📜 Licença
