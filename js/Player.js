@@ -1,24 +1,26 @@
 export class Player {
-    constructor(x = 1500, y = 1500) {
+    constructor(x, y, isLocal = false, game = null) {
         this.x = x;
         this.y = y;
         this.radius = 20;
         this.speed = 5;
-        this.name = localStorage.getItem('playerName') || 'Player';
         this.health = 100;
+        this.shield = 100;
+        this.shieldActive = false;
+        this.shieldTimer = 0;
+        this.shieldDuration = 120;  // 2 segundos (60fps * 2)
+        this.shieldCooldown = 0;
+        this.shieldCooldownMax = 180;  // 3 segundos (60fps * 3)
+        this.shieldRegenRate = 0.5;  // Regenera 0.5 por frame
+        this.shieldConsumptionRate = 2;  // Consome 2 por frame
         this.ammo = 30;
         this.score = 0;
         this.kills = 0;
-
-        // Sistema de escudo
-        this.shield = 100;
-        this.shieldActive = false;
-        this.shieldCooldown = 0;
-        this.shieldCooldownMax = 300; // 5 segundos (60 fps * 5)
-        this.shieldDuration = 180; // 3 segundos
-        this.shieldTimer = 0;
-        this.shieldRegenRate = 0.2; // Taxa de regeneração do escudo
-        this.shieldConsumptionRate = 1; // Taxa de consumo do escudo quando ativo
+        this.isLocal = isLocal;
+        this.name = '';
+        this.id = '';
+        this.skinColor = '#fff';
+        this.game = game;
     }
 
     move(targetX, targetY, worldWidth, worldHeight) {
@@ -62,7 +64,9 @@ export class Player {
             speed: 15,
             radius: 5,
             damage: 10,
-            lifetime: 60
+            lifetime: 60,
+            playerId: this.isLocal ? 'local' : this.id,
+            skinColor: this.skinColor
         };
 
         this.ammo--;
@@ -86,25 +90,21 @@ export class Player {
 
         // Se o escudo estiver ativo
         if (this.shieldActive) {
+            // Atualiza o timer do escudo
+            this.shieldTimer--;
+            
             // Consome o escudo
             this.shield = Math.max(0, this.shield - this.shieldConsumptionRate);
             
-            // Desativa o escudo se acabar a energia
-            if (this.shield <= 0) {
-                this.shield = 0;
+            // Desativa o escudo se acabar o timer ou a energia
+            if (this.shieldTimer <= 0 || this.shield <= 0) {
+                this.shield = Math.max(0, this.shield);  // Garante que não fique negativo
                 this.shieldActive = false;
                 this.shieldCooldown = this.shieldCooldownMax;
             }
-
-            this.shieldTimer--;
-            if (this.shieldTimer <= 0) {
-                this.shieldActive = false;
-                this.shieldCooldown = this.shieldCooldownMax;
-            }
-        }
-
-        // Regenera o escudo quando não estiver ativo e não estiver em cooldown
-        if (!this.shieldActive && this.shieldCooldown <= 0 && this.shield < 100) {
+        } 
+        // Se o escudo não estiver ativo e não estiver em cooldown, regenera
+        else if (this.shieldCooldown <= 0 && this.shield < 100) {
             this.shield = Math.min(100, this.shield + this.shieldRegenRate);
         }
     }
@@ -138,8 +138,40 @@ export class Player {
         this.ammo += amount;
     }
 
-    render(ctx, mouseX, mouseY, isLocal = false, skinManager = null, frameCount = 0) {
-        // Efeito do escudo
+    render(ctx, mouseX, mouseY, isLocal = false) {
+        // Desenhar o jogador
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.skinColor;
+        ctx.fill();
+        ctx.closePath();
+
+        // Nome do jogador
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.name, this.x, this.y - this.radius - 10);
+
+        // Barra de vida
+        const barWidth = 40;
+        const barHeight = 4;
+        const barSpacing = 5;
+
+        // Barra de vida (vermelha/verde)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth, barHeight);
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth * (this.health/100), barHeight);
+
+        // Barra de escudo (azul)
+        if (this.shield > 0) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20 - barHeight - barSpacing, barWidth, barHeight);
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20 - barHeight - barSpacing, barWidth * (this.shield/100), barHeight);
+        }
+
+        // Efeito visual do escudo ativo
         if (this.shieldActive) {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
@@ -149,72 +181,9 @@ export class Player {
             ctx.closePath();
         }
 
-        // Corpo do jogador
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        if (isLocal && skinManager) {
-            ctx.fillStyle = skinManager.getPlayerColor(frameCount);
-        } else {
-            ctx.fillStyle = '#ff4444';
-        }
-        ctx.fill();
-        ctx.closePath();
-
-        // Nome do jogador
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-            this.name,
-            this.x,
-            this.y - this.radius - 10
-        );
-
-        // Barra de vida
-        const healthBarWidth = 40;
-        const healthBarHeight = 4;
-        const healthPercentage = this.health / 100;
-        
-        ctx.fillStyle = '#333';
-        ctx.fillRect(
-            this.x - healthBarWidth/2,
-            this.y - this.radius - 20,
-            healthBarWidth,
-            healthBarHeight
-        );
-        
-        ctx.fillStyle = '#4CAF50';
-        ctx.fillRect(
-            this.x - healthBarWidth/2,
-            this.y - this.radius - 20,
-            healthBarWidth * healthPercentage,
-            healthBarHeight
-        );
-
-        // Barra de escudo
-        if (this.shield > 0) {
-            const shieldBarY = this.y - this.radius - 25;
-            const shieldPercentage = this.shield / 100;
-            
-            ctx.fillStyle = '#333';
-            ctx.fillRect(
-                this.x - healthBarWidth/2,
-                shieldBarY,
-                healthBarWidth,
-                healthBarHeight
-            );
-            
-            ctx.fillStyle = '#2196F3';
-            ctx.fillRect(
-                this.x - healthBarWidth/2,
-                shieldBarY,
-                healthBarWidth * shieldPercentage,
-                healthBarHeight
-            );
-        }
-
-        // Linha de mira (apenas para jogador local)
-        if (isLocal) {
+        // Linha do cursor e mira (apenas para jogador local)
+        if (isLocal && this.game) {
+            // Linha do cursor até o jogador
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(mouseX, mouseY);
@@ -225,7 +194,12 @@ export class Player {
 
             // Mira no cursor
             const crosshairSize = 10;
-            ctx.strokeStyle = '#fff';
+            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
+            const crosshairColor = skin.color === 'rainbow' ? 
+                `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
+                skin.color;
+
+            ctx.strokeStyle = crosshairColor;
             ctx.lineWidth = 2;
 
             // Cruz da mira
@@ -242,7 +216,7 @@ export class Player {
             // Círculo externo da mira
             ctx.beginPath();
             ctx.arc(mouseX, mouseY, crosshairSize/2, 0, Math.PI * 2);
-            ctx.strokeStyle = '#fff';
+            ctx.strokeStyle = crosshairColor;
             ctx.lineWidth = 1;
             ctx.stroke();
             ctx.closePath();

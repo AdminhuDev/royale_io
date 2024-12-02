@@ -180,7 +180,14 @@ export class Game {
     }
 
     createPlayer() {
-        this.localPlayer = new Player();
+        const x = this.worldWidth / 2;
+        const y = this.worldHeight / 2;
+        this.localPlayer = new Player(x, y, true, this);
+        this.localPlayer.name = localStorage.getItem('playerName') || 'Player';
+        
+        // Definir a cor da skin
+        const skin = this.skinManager.skins[this.skinManager.currentSkin];
+        this.localPlayer.skinColor = skin.color === 'rainbow' ? '#ff0000' : skin.color;
     }
 
     movePlayer() {
@@ -651,9 +658,22 @@ export class Game {
 
     renderBullets() {
         for (const bullet of this.bullets) {
+            // Obter a cor da skin do jogador que atirou
+            let bulletColor = '#ff4444';  // Cor padrão
+            if (bullet.playerId === 'local') {
+                const skin = this.skinManager.skins[this.skinManager.currentSkin];
+                bulletColor = skin.color === 'rainbow' ? 
+                    `hsl(${(this.frameCount * 2) % 360}, 100%, 50%)` : 
+                    skin.color;
+            } else if (this.players.has(bullet.playerId)) {
+                const player = this.players.get(bullet.playerId);
+                bulletColor = player.skinColor;
+            }
+
+            // Desenhar o projétil
             this.ctx.beginPath();
             this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
-            this.ctx.fillStyle = '#ff4444';
+            this.ctx.fillStyle = bulletColor;
             this.ctx.fill();
             this.ctx.closePath();
 
@@ -661,7 +681,7 @@ export class Game {
             this.ctx.beginPath();
             this.ctx.moveTo(bullet.x, bullet.y);
             this.ctx.lineTo(bullet.x - bullet.dirX * 20, bullet.y - bullet.dirY * 20);
-            this.ctx.strokeStyle = 'rgba(255, 68, 68, 0.5)';
+            this.ctx.strokeStyle = bulletColor.replace(')', ', 0.5)').replace('rgb', 'rgba');
             this.ctx.lineWidth = bullet.radius;
             this.ctx.stroke();
             this.ctx.closePath();
@@ -747,11 +767,13 @@ export class Game {
     }
 
     addPlayer(playerId, data) {
-        const player = new Player(data.x, data.y);
+        const player = new Player(data.x, data.y, false, this);
         player.name = data.name;
         player.health = data.health;
         player.score = data.score;
         player.kills = data.kills;
+        player.id = playerId;
+        player.skinColor = data.skinColor || '#ff4444';
         this.players.set(playerId, player);
     }
 
