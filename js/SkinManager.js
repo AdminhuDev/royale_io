@@ -2,37 +2,37 @@ export class SkinManager {
     constructor() {
         this.skins = {
             default: {
-                name: 'Padrão',
+                name: 'Espírito Lunar',
                 color: '#fff',
                 price: 0,
                 unlocked: true
             },
             red: {
-                name: 'Vermelho',
+                name: 'Chama Infernal',
                 color: '#ff4444',
                 price: 1000,
                 unlocked: false
             },
             blue: {
-                name: 'Azul',
+                name: 'Gelo Eterno',
                 color: '#4444ff',
                 price: 2000,
                 unlocked: false
             },
             green: {
-                name: 'Verde',
+                name: 'Veneno Ancestral',
                 color: '#44ff44',
                 price: 3000,
                 unlocked: false
             },
             gold: {
-                name: 'Dourado',
+                name: 'Relíquia Sagrada',
                 color: '#ffd700',
                 price: 5000,
                 unlocked: false
             },
             rainbow: {
-                name: 'Arco-íris',
+                name: 'Prisma Dimensional',
                 color: 'rainbow',
                 price: 10000,
                 unlocked: false

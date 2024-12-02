@@ -147,6 +147,96 @@ export class Player {
             }
         }
 
+        // Efeitos de partículas baseados na skin
+        if (this.game) {
+            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
+            const particleColor = skin.color === 'rainbow' ? 
+                `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
+                skin.color;
+
+            // Desenhar partículas
+            for (let i = 0; i < 3; i++) {
+                const angle = (Math.PI * 2 / 3) * i + (this.game.frameCount * 0.02);
+                const distance = 25 + Math.sin(this.game.frameCount * 0.1) * 5;
+                const x = this.x + Math.cos(angle) * distance;
+                const y = this.y + Math.sin(angle) * distance;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = particleColor;
+                ctx.globalAlpha = 0.5 + Math.sin(this.game.frameCount * 0.1) * 0.3;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.closePath();
+
+                // Efeitos específicos por skin
+                switch(this.game.skinManager.currentSkin) {
+                    case 'default': // Espírito Lunar
+                        // Partículas brilhantes que pulsam
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        ctx.fill();
+                        ctx.closePath();
+                        break;
+
+                    case 'red': // Chama Infernal
+                        // Partículas de fogo que sobem
+                        const fireY = y - Math.random() * 5;
+                        ctx.beginPath();
+                        ctx.arc(x + Math.sin(this.game.frameCount * 0.1) * 2, fireY, 3, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+                        ctx.fill();
+                        ctx.closePath();
+                        break;
+
+                    case 'blue': // Gelo Eterno
+                        // Cristais de gelo girando
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(this.game.frameCount * 0.05);
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 0);
+                        ctx.lineTo(4, 0);
+                        ctx.moveTo(0, -4);
+                        ctx.lineTo(0, 4);
+                        ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+                        ctx.stroke();
+                        ctx.restore();
+                        break;
+
+                    case 'green': // Veneno Ancestral
+                        // Bolhas de veneno que flutuam
+                        const bubbleY = y + Math.sin(this.game.frameCount * 0.1 + i) * 3;
+                        ctx.beginPath();
+                        ctx.arc(x, bubbleY, 2 + Math.random(), 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                        ctx.fill();
+                        ctx.closePath();
+                        break;
+
+                    case 'gold': // Relíquia Sagrada
+                        // Aura dourada brilhante
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+                        ctx.stroke();
+                        ctx.closePath();
+                        break;
+
+                    case 'rainbow': // Prisma Dimensional
+                        // Rastros de energia dimensional
+                        const hue = (this.game.frameCount * 2 + i * 120) % 360;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+                        ctx.stroke();
+                        ctx.closePath();
+                        break;
+                }
+            }
+        }
+
         // Desenhar o jogador
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -191,23 +281,25 @@ export class Player {
 
         // Linha do cursor e mira (apenas para jogador local)
         if (isLocal && this.game) {
+            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
+            const skinColor = skin.color === 'rainbow' ? 
+                `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
+                skin.color;
+
             // Linha do cursor até o jogador
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(mouseX, mouseY);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.strokeStyle = skin.color === 'rainbow' ? 
+                `hsla(${(this.game.frameCount * 2) % 360}, 100%, 50%, 0.2)` : 
+                this.skinColor.replace('rgb', 'rgba').replace(')', ', 0.2)');
             ctx.lineWidth = 1;
             ctx.stroke();
             ctx.closePath();
 
             // Mira no cursor
             const crosshairSize = 10;
-            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
-            const crosshairColor = skin.color === 'rainbow' ? 
-                `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
-                skin.color;
-
-            ctx.strokeStyle = crosshairColor;
+            ctx.strokeStyle = skinColor;
             ctx.lineWidth = 2;
 
             // Cruz da mira
@@ -224,7 +316,7 @@ export class Player {
             // Círculo externo da mira
             ctx.beginPath();
             ctx.arc(mouseX, mouseY, crosshairSize/2, 0, Math.PI * 2);
-            ctx.strokeStyle = crosshairColor;
+            ctx.strokeStyle = skinColor;
             ctx.lineWidth = 1;
             ctx.stroke();
             ctx.closePath();
