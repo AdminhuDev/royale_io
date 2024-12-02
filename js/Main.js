@@ -41,12 +41,12 @@ function initializeSkins() {
             } else {
                 // Verificar se tem pontos suficientes
                 const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
-                const availablePoints = stats.highScore || 0;
+                const availablePoints = stats.totalPoints || 0;
                 
                 if (availablePoints >= skin.price) {
                     if (confirm(`Deseja comprar a skin ${skin.name} por ${skin.price} pontos?`)) {
                         // Atualizar pontos disponíveis
-                        stats.highScore = availablePoints - skin.price;
+                        stats.totalPoints = availablePoints - skin.price;
                         localStorage.setItem('gameStats', JSON.stringify(stats));
                         
                         // Desbloquear skin
@@ -67,7 +67,7 @@ function initializeSkins() {
 }
 
 // Carregar e mostrar estatísticas
-function updateStats() {
+export function updateStats() {
     const stats = JSON.parse(localStorage.getItem('gameStats') || '{}');
     
     // Valores padrão caso não existam
@@ -75,12 +75,14 @@ function updateStats() {
     stats.lastScore = stats.lastScore || 0;
     stats.totalKills = stats.totalKills || 0;
     stats.wins = stats.wins || 0;
+    stats.totalPoints = stats.totalPoints || 0;
 
     // Atualizar elementos na tela
     document.getElementById('high-score-value').textContent = stats.highScore;
     document.getElementById('last-score-value').textContent = stats.lastScore;
     document.getElementById('total-kills-value').textContent = stats.totalKills;
     document.getElementById('wins-value').textContent = stats.wins;
+    document.getElementById('total-points-value').textContent = stats.totalPoints;
 }
 
 document.addEventListener('DOMContentLoaded', () => {

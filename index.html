@@ -17,36 +17,46 @@
     <div id="start-screen" class="start-screen">
         <h1>Royale.io</h1>
         <div class="menu-container">
-            <div class="name-input">
-                <input type="text" id="player-name-input" placeholder="Digite seu nome" maxlength="15">
-            </div>
-            
-            <div class="button-group">
-                <button id="start-game-button" class="game-button">Iniciar Jogo</button>
-                <button id="skins-button" class="game-button secondary">Skins</button>
-                <button id="tutorial-button" class="game-button secondary">Tutorial</button>
+            <div class="column left-column">
+                <div class="name-input">
+                    <input type="text" id="player-name-input" placeholder="Digite seu nome" maxlength="15">
+                </div>
+                
+                <div class="button-group">
+                    <button id="start-game-button" class="game-button">Iniciar Jogo</button>
+                    <button id="skins-button" class="game-button secondary">Skins</button>
+                    <button id="tutorial-button" class="game-button secondary">Tutorial</button>
+                </div>
             </div>
 
-            <div class="stats-container">
-                <div class="stats-header">Estatísticas</div>
-                <div class="stats-row">
-                    <div class="stat-item">
-                        <div class="stat-label">Recorde</div>
-                        <div id="high-score-value" class="stat-value">0</div>
+            <div class="column right-column">
+                <div class="stats-container">
+                    <div class="stats-header">Estatísticas</div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-label">Recorde</div>
+                            <div id="high-score-value" class="stat-value">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Última Pontuação</div>
+                            <div id="last-score-value" class="stat-value">0</div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Última Pontuação</div>
-                        <div id="last-score-value" class="stat-value">0</div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-label">Total de Kills</div>
+                            <div id="total-kills-value" class="stat-value">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Vitórias</div>
+                            <div id="wins-value" class="stat-value">0</div>
+                        </div>
                     </div>
-                </div>
-                <div class="stats-row">
-                    <div class="stat-item">
-                        <div class="stat-label">Total de Kills</div>
-                        <div id="total-kills-value" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Vitórias</div>
-                        <div id="wins-value" class="stat-value">0</div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-label">Pontos Disponíveis</div>
+                            <div id="total-points-value" class="stat-value">0</div>
+                        </div>
                     </div>
                 </div>
             </div>

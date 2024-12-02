@@ -4,6 +4,7 @@ import { NetworkManager } from './NetworkManager.js';
 import { Player } from './Player.js';
 import { Bot } from './Bot.js';
 import { SkinManager } from './SkinManager.js';
+import { updateStats } from './Main.js';
 
 export class Game {
     setupCanvas() {
@@ -362,10 +363,14 @@ export class Game {
             
             stats.lastScore = this.score;
             stats.highScore = Math.max(stats.highScore || 0, this.score);
+            stats.totalPoints = (stats.totalPoints || 0) + this.score;
             stats.totalKills = (stats.totalKills || 0) + this.localPlayer.kills;
             stats.wins = (stats.wins || 0) + (isVictory ? 1 : 0);
             
             localStorage.setItem('gameStats', JSON.stringify(stats));
+            
+            // Atualizar estatísticas na interface
+            updateStats();
 
             // Esconder UI do jogo e mostrar tela de game over
             if (gameUI) gameUI.style.display = 'none';
