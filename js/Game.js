@@ -64,8 +64,8 @@ export class Game {
             y: this.worldHeight / 2,
             maxRadius: 1500,
             currentRadius: 1500,
-            targetRadius: 750,
-            shrinkSpeed: 0.5,
+            targetRadius: 0,
+            shrinkSpeed: 0.8,
             damage: 2,
             timer: 60,
             shrinking: false,
@@ -274,18 +274,16 @@ export class Game {
             }
         }
 
-        if (this.safeZone.shrinking && this.safeZone.currentRadius > 0) {
+        if (this.safeZone.shrinking) {
             const shrinkProgress = 1 - (this.safeZone.currentRadius / this.safeZone.maxRadius);
-            this.safeZone.damage = Math.min(10, Math.max(2, 2 + (shrinkProgress * 8)));
+            this.safeZone.damage = Math.min(15, Math.max(2, 2 + (shrinkProgress * 13)));
             
-            if (this.safeZone.currentRadius > this.safeZone.targetRadius) {
-                this.safeZone.currentRadius -= this.safeZone.shrinkSpeed;
-            } else {
-                this.safeZone.currentRadius -= this.safeZone.shrinkSpeed * 0.3;
-            }
+            // Diminui a zona continuamente até chegar a 0
+            this.safeZone.currentRadius = Math.max(0, this.safeZone.currentRadius - this.safeZone.shrinkSpeed);
             
-            if (this.safeZone.currentRadius < 50) {
-                this.safeZone.currentRadius = 50;
+            // Aumenta a velocidade de encolhimento conforme a zona fica menor
+            if (this.safeZone.currentRadius < 500) {
+                this.safeZone.shrinkSpeed = 1.2;
             }
         }
 
@@ -296,7 +294,7 @@ export class Game {
             const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
             
             if (distanceFromCenter > this.safeZone.currentRadius) {
-                const distanceMultiplier = Math.min(2, (distanceFromCenter - this.safeZone.currentRadius) / 100);
+                const distanceMultiplier = Math.min(3, (distanceFromCenter - this.safeZone.currentRadius) / 100);
                 this.localPlayer.health -= (this.safeZone.damage * distanceMultiplier) * (1/60);
                 
                 if (this.localPlayer.health <= 0) {
@@ -313,7 +311,7 @@ export class Game {
             const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
             
             if (distanceFromCenter > this.safeZone.currentRadius) {
-                const distanceMultiplier = Math.min(2, (distanceFromCenter - this.safeZone.currentRadius) / 100);
+                const distanceMultiplier = Math.min(3, (distanceFromCenter - this.safeZone.currentRadius) / 100);
                 bot.health -= (this.safeZone.damage * distanceMultiplier) * (1/60);
                 
                 if (bot.health <= 0) {
