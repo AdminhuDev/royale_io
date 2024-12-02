@@ -203,6 +203,28 @@ document.addEventListener('DOMContentLoaded', () => {
         tutorialScreen.style.display = 'none';
     });
 
+    const skinsButton = document.getElementById('skins-button');
+    const skinsPopup = document.getElementById('skins-popup');
+    const closeSkinsButton = document.getElementById('close-skins');
+
+    // Abrir popup de skins
+    skinsButton.addEventListener('click', () => {
+        skinsPopup.classList.add('show');
+    });
+
+    // Fechar popup de skins
+    closeSkinsButton.addEventListener('click', () => {
+        skinsPopup.classList.remove('show');
+    });
+
+    // Fechar popup ao clicar fora
+    skinsPopup.addEventListener('click', (e) => {
+        if (e.target === skinsPopup) {
+            skinsPopup.classList.remove('show');
+        }
+    });
+
+    // Inicializar skins
     initializeSkins();
 });
 
