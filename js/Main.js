@@ -1,5 +1,62 @@
 import { Game } from './Game.js';
 import { Logger } from './Logger.js';
+import { SkinManager } from './SkinManager.js';
+
+let game = null;
+const skinManager = new SkinManager();
+
+function initializeSkins() {
+    const skinsGrid = document.getElementById('skins-grid');
+    const skins = skinManager.getAllSkins();
+
+    for (const [skinId, skin] of Object.entries(skins)) {
+        const skinElement = document.createElement('div');
+        skinElement.className = `skin-item ${skin.unlocked ? '' : 'locked'} ${skinManager.currentSkin === skinId ? 'selected' : ''}`;
+        
+        const preview = document.createElement('div');
+        preview.className = 'skin-preview';
+        preview.style.backgroundColor = skin.color === 'rainbow' ? '#ff0000' : skin.color;
+        
+        const name = document.createElement('div');
+        name.className = 'skin-name';
+        name.textContent = skin.name;
+        
+        const price = document.createElement('div');
+        price.className = 'skin-price';
+        price.textContent = skin.price > 0 ? `${skin.price} pontos` : 'Grátis';
+        
+        skinElement.appendChild(preview);
+        skinElement.appendChild(name);
+        skinElement.appendChild(price);
+        
+        skinElement.addEventListener('click', () => {
+            if (skin.unlocked) {
+                // Remover seleção anterior
+                const selected = skinsGrid.querySelector('.selected');
+                if (selected) selected.classList.remove('selected');
+                
+                // Selecionar nova skin
+                skinElement.classList.add('selected');
+                skinManager.selectSkin(skinId);
+            } else {
+                // Verificar se tem pontos suficientes
+                const currentScore = parseInt(localStorage.getItem('lastScore') || '0');
+                if (currentScore >= skin.price) {
+                    if (confirm(`Deseja comprar a skin ${skin.name} por ${skin.price} pontos?`)) {
+                        localStorage.setItem('lastScore', (currentScore - skin.price).toString());
+                        skinManager.unlockSkin(skinId);
+                        skinElement.classList.remove('locked');
+                        updateStats(); // Atualizar estatísticas na tela
+                    }
+                } else {
+                    alert(`Você precisa de ${skin.price} pontos para comprar esta skin!`);
+                }
+            }
+        });
+        
+        skinsGrid.appendChild(skinElement);
+    }
+}
 
 // Carregar e mostrar estatísticas
 function updateStats() {
@@ -137,6 +194,8 @@ document.addEventListener('DOMContentLoaded', () => {
     closeTutorialButton.addEventListener('click', () => {
         tutorialScreen.style.display = 'none';
     });
+
+    initializeSkins();
 });
 
 function setupMouseEvents(canvas) {

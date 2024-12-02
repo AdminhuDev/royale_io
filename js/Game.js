@@ -3,6 +3,7 @@ import { Camera } from './Camera.js';
 import { NetworkManager } from './NetworkManager.js';
 import { Player } from './Player.js';
 import { Bot } from './Bot.js';
+import { SkinManager } from './SkinManager.js';
 
 export class Game {
     setupCanvas() {
@@ -57,6 +58,7 @@ export class Game {
         this.camera = new Camera(this);
         this.lootManager = new LootManager(this);
         this.networkManager = new NetworkManager(this);
+        this.skinManager = new SkinManager();
         
         // Zona Segura
         this.safeZone = {
@@ -514,7 +516,7 @@ export class Game {
                 this.renderBullets();
 
                 if (this.localPlayer && this.localPlayer.health > 0) {
-                    this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true);
+                    this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true, this.skinManager, this.frameCount);
                 }
 
                 this.renderEffects();

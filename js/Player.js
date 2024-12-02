@@ -91,6 +91,7 @@ export class Player {
             
             // Desativa o escudo se acabar a energia
             if (this.shield <= 0) {
+                this.shield = 0;
                 this.shieldActive = false;
                 this.shieldCooldown = this.shieldCooldownMax;
             }
@@ -137,7 +138,7 @@ export class Player {
         this.ammo += amount;
     }
 
-    render(ctx, mouseX, mouseY, isLocal = false) {
+    render(ctx, mouseX, mouseY, isLocal = false, skinManager = null, frameCount = 0) {
         // Efeito do escudo
         if (this.shieldActive) {
             ctx.beginPath();
@@ -151,7 +152,11 @@ export class Player {
         // Corpo do jogador
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = isLocal ? '#fff' : '#ff4444';
+        if (isLocal && skinManager) {
+            ctx.fillStyle = skinManager.getPlayerColor(frameCount);
+        } else {
+            ctx.fillStyle = '#ff4444';
+        }
         ctx.fill();
         ctx.closePath();
 

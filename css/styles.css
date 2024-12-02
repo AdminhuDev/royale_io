@@ -411,3 +411,73 @@ body {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Estilos para a seção de Skins */
+.skins-container {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px 0;
+    width: 100%;
+    max-width: 400px;
+}
+
+.skins-header {
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.skins-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 10px;
+}
+
+.skin-item {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.skin-item:hover {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.skin-item.selected {
+    border: 2px solid #4CAF50;
+}
+
+.skin-item.locked {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.skin-preview {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 0 auto 5px;
+}
+
+.skin-name {
+    color: #fff;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.skin-price {
+    color: #ffd700;
+    font-size: 12px;
+}
+
+.skin-item.locked .skin-price::before {
+    content: "🔒 ";
+}
