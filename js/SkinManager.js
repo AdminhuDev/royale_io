@@ -10,31 +10,31 @@ export class SkinManager {
             red: {
                 name: 'Vermelho',
                 color: '#ff4444',
-                price: 100,
+                price: 1000,
                 unlocked: false
             },
             blue: {
                 name: 'Azul',
                 color: '#4444ff',
-                price: 100,
+                price: 2000,
                 unlocked: false
             },
             green: {
                 name: 'Verde',
                 color: '#44ff44',
-                price: 100,
+                price: 3000,
                 unlocked: false
             },
             gold: {
                 name: 'Dourado',
                 color: '#ffd700',
-                price: 500,
+                price: 5000,
                 unlocked: false
             },
             rainbow: {
                 name: 'Arco-íris',
                 color: 'rainbow',
-                price: 1000,
+                price: 10000,
                 unlocked: false
             }
         };
