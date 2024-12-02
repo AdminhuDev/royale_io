@@ -106,9 +106,8 @@ Este projeto está licenciado sob a [Licença ISC](LICENSE).
 
 ## 📞 Contato
 
-- 📧 Email: adminhudev@gmail.com
-- 🐦 Twitter: [@adminhudev](https://twitter.com/adminhudev)
-- 💬 Discord: [Servidor Royale.io](https://discord.gg/royaleio)
+- 📧 Telegram: [@Analista_Adminhu](https://t.me/Analista_Adminhu)
+- 💻 GitHub: [AdminhuDev](https://github.com/AdminhuDev)
 
 ---
 Feito com ❤️ por [AdminhuDev](https://github.com/AdminhuDev) 
