@@ -13,9 +13,272 @@ function initializeSkins() {
         const skinElement = document.createElement('div');
         skinElement.className = `skin-item ${skin.unlocked ? '' : 'locked'} ${skinManager.currentSkin === skinId ? 'selected' : ''}`;
         
-        const preview = document.createElement('div');
+        // Criar canvas para preview da skin
+        const preview = document.createElement('canvas');
         preview.className = 'skin-preview';
-        preview.style.backgroundColor = skin.color === 'rainbow' ? '#ff0000' : skin.color;
+        preview.width = 100;
+        preview.height = 100;
+        const ctx = preview.getContext('2d');
+        
+        // Variável global para o frameCount
+        let frameCount = 0;
+        
+        // Função de animação
+        function animate() {
+            if (!preview.isConnected) return; // Parar animação se o canvas for removido
+            
+            ctx.clearRect(0, 0, preview.width, preview.height);
+            
+            const centerX = preview.width / 2;
+            const centerY = preview.height / 2;
+            const radius = 20;
+            
+            // Cor base da skin
+            let skinColor = skin.color;
+            if (skin.color === 'rainbow') {
+                skinColor = `hsl(${(frameCount * 2) % 360}, 100%, 50%)`;
+            }
+            
+            // Efeitos específicos por skin
+            switch(skinId) {
+                case 'default': // Espírito Lunar
+                    // Aura lunar pulsante
+                    const lunarPulse = 0.5 + Math.sin(frameCount * 0.05) * 0.3;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius + 10, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${lunarPulse * 0.2})`;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Estrelas orbitantes
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (frameCount * 0.02) + (i * Math.PI * 2 / 5);
+                        const x = centerX + Math.cos(angle) * (30 + Math.sin(frameCount * 0.05) * 5);
+                        const y = centerY + Math.sin(angle) * (30 + Math.sin(frameCount * 0.05) * 5);
+                        
+                        // Estrela
+                        const starSize = 2 + Math.sin(frameCount * 0.1 + i) * 1;
+                        ctx.beginPath();
+                        ctx.arc(x, y, starSize, 0, Math.PI * 2);
+                        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + Math.sin(frameCount * 0.1 + i) * 0.3})`;
+                        ctx.fill();
+                        ctx.closePath();
+
+                        // Rastro da estrela
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x - Math.cos(angle) * 5, y - Math.sin(angle) * 5);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                        ctx.stroke();
+                        ctx.closePath();
+                    }
+                    break;
+
+                case 'red': // Chama Infernal
+                    // Aura de fogo
+                    const fireGlow = 0.3 + Math.sin(frameCount * 0.1) * 0.1;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 50, 0, ${fireGlow})`;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Partículas de fogo
+                    for (let i = 0; i < 8; i++) {
+                        const angle = Math.PI * 2 * Math.random();
+                        const distance = radius + Math.random() * 20;
+                        const x = centerX + Math.cos(angle) * distance;
+                        const y = centerY + Math.sin(angle) * distance - Math.random() * 10;
+                        
+                        // Chama
+                        ctx.beginPath();
+                        ctx.moveTo(x - 3, y + 6);
+                        ctx.quadraticCurveTo(x, y - 6, x + 3, y + 6);
+                        ctx.fillStyle = `rgba(255, ${50 + Math.random() * 150}, 0, ${0.5 + Math.random() * 0.5})`;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                    break;
+
+                case 'blue': // Gelo Eterno
+                    // Aura gelada
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius + 12, 0, Math.PI * 2);
+                    const iceGradient = ctx.createRadialGradient(
+                        centerX, centerY, radius,
+                        centerX, centerY, radius + 12
+                    );
+                    iceGradient.addColorStop(0, 'rgba(100, 200, 255, 0.3)');
+                    iceGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
+                    ctx.fillStyle = iceGradient;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Cristais de gelo
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (frameCount * 0.02) + (i * Math.PI * 2 / 6);
+                        const x = centerX + Math.cos(angle) * 25;
+                        const y = centerY + Math.sin(angle) * 25;
+
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(angle + frameCount * 0.02);
+                        
+                        // Cristal
+                        ctx.beginPath();
+                        ctx.moveTo(0, -5);
+                        ctx.lineTo(3, 0);
+                        ctx.lineTo(0, 5);
+                        ctx.lineTo(-3, 0);
+                        ctx.closePath();
+                        ctx.fillStyle = `rgba(150, 220, 255, ${0.6 + Math.sin(frameCount * 0.1) * 0.2})`;
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.stroke();
+                        
+                        ctx.restore();
+                    }
+                    break;
+
+                case 'green': // Veneno Ancestral
+                    // Aura tóxica
+                    const toxicPulse = 0.3 + Math.sin(frameCount * 0.05) * 0.1;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius + 15, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 255, 0, ${toxicPulse})`;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Bolhas de veneno
+                    for (let i = 0; i < 12; i++) {
+                        const time = frameCount * 0.05 + i;
+                        const angle = time + (i * Math.PI * 2 / 12);
+                        const distance = 20 + Math.sin(time * 0.5) * 10;
+                        const x = centerX + Math.cos(angle) * distance;
+                        const y = centerY + Math.sin(angle) * distance;
+                        
+                        // Bolha
+                        const bubbleSize = 2 + Math.sin(time) * 1;
+                        ctx.beginPath();
+                        ctx.arc(x, y, bubbleSize, 0, Math.PI * 2);
+                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, bubbleSize);
+                        gradient.addColorStop(0, 'rgba(150, 255, 150, 0.8)');
+                        gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+                        ctx.fillStyle = gradient;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                    break;
+
+                case 'gold': // Relíquia Sagrada
+                    // Aura divina
+                    const divineGlow = 0.4 + Math.sin(frameCount * 0.05) * 0.2;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius + 10, 0, Math.PI * 2);
+                    const divineGradient = ctx.createRadialGradient(
+                        centerX, centerY, radius,
+                        centerX, centerY, radius + 10
+                    );
+                    divineGradient.addColorStop(0, `rgba(255, 215, 0, ${divineGlow})`);
+                    divineGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.fillStyle = divineGradient;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Símbolos sagrados
+                    for (let i = 0; i < 4; i++) {
+                        const angle = (frameCount * 0.02) + (i * Math.PI / 2);
+                        const x = centerX + Math.cos(angle) * 30;
+                        const y = centerY + Math.sin(angle) * 30;
+
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(angle);
+                        
+                        // Símbolo
+                        ctx.beginPath();
+                        ctx.moveTo(-5, -5);
+                        ctx.lineTo(5, -5);
+                        ctx.lineTo(0, 5);
+                        ctx.closePath();
+                        ctx.fillStyle = `rgba(255, 215, 0, ${0.7 + Math.sin(frameCount * 0.1) * 0.3})`;
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.stroke();
+                        
+                        ctx.restore();
+                    }
+                    break;
+
+                case 'rainbow': // Prisma Dimensional
+                    // Aura dimensional
+                    for (let i = 0; i < 360; i += 30) {
+                        const hue = (i + frameCount * 2) % 360;
+                        const angle = (i * Math.PI / 180);
+                        const distance = radius + 10 + Math.sin(frameCount * 0.05) * 5;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(centerX, centerY);
+                        ctx.lineTo(
+                            centerX + Math.cos(angle) * distance,
+                            centerY + Math.sin(angle) * distance
+                        );
+                        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.closePath();
+                    }
+
+                    // Partículas dimensionais
+                    for (let i = 0; i < 8; i++) {
+                        const time = frameCount * 0.05 + i;
+                        const angle = time + (i * Math.PI * 2 / 8);
+                        const distance = 25 + Math.sin(time) * 10;
+                        const x = centerX + Math.cos(angle) * distance;
+                        const y = centerY + Math.sin(angle) * distance;
+                        const hue = (frameCount * 2 + i * 45) % 360;
+                        
+                        // Partícula
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        const particleGradient = ctx.createRadialGradient(x, y, 0, x, y, 3);
+                        particleGradient.addColorStop(0, `hsla(${hue}, 100%, 50%, 0.8)`);
+                        particleGradient.addColorStop(1, `hsla(${hue}, 100%, 50%, 0)`);
+                        ctx.fillStyle = particleGradient;
+                        ctx.fill();
+                        ctx.closePath();
+
+                        // Rastro dimensional
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(
+                            x - Math.cos(angle) * 8,
+                            y - Math.sin(angle) * 8
+                        );
+                        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.closePath();
+                    }
+                    break;
+            }
+
+            // Desenhar o jogador
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = skinColor;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+
+            frameCount++;
+            requestAnimationFrame(animate);
+        }
+
+        // Iniciar animação
+        requestAnimationFrame(animate);
         
         const name = document.createElement('div');
         name.className = 'skin-name';
