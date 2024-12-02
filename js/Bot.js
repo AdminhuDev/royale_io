@@ -1,8 +1,8 @@
 import { Player } from './Player.js';
 
 export class Bot extends Player {
-    constructor(x = 1500, y = 1500) {
-        super(x, y);
+    constructor(x = 1500, y = 1500, game = null) {
+        super(x, y, false, game);
         this.name = this.generateBotName();
         this.targetX = x;
         this.targetY = y;
@@ -10,9 +10,12 @@ export class Bot extends Player {
         this.updateCounter = 0;
         this.state = 'wandering'; // wandering, chasing, attacking, fleeing
         this.target = null;
-        this.reactionTime = Math.random() * 10 + 10; // 10-20 frames de delay
+        this.reactionTime = Math.random() * 5 + 5; // 5-10 frames de delay
         this.reactionCounter = 0;
         this.accuracy = Math.random() * 0.3 + 0.6; // 60-90% de precisão
+        this.shootInterval = Math.random() * 20 + 30; // 30-50 frames entre tiros
+        this.shootCounter = 0;
+        this.ammo = Infinity; // Munição infinita para bots
     }
 
     generateBotName() {
@@ -24,6 +27,7 @@ export class Bot extends Player {
     update(game) {
         this.updateCounter++;
         this.reactionCounter++;
+        this.shootCounter++;
 
         // Atualizar estado e alvo
         if (this.updateCounter >= this.updateInterval) {
@@ -52,10 +56,23 @@ export class Bot extends Player {
     }
 
     updateState(game) {
-        // Encontrar jogador mais próximo
-        let nearestPlayer = null;
-        let nearestDistance = Infinity;
+        // Lista de possíveis alvos
+        let potentialTargets = [];
 
+        // Adicionar jogador local
+        if (game.localPlayer && game.localPlayer.health > 0) {
+            const dx = game.localPlayer.x - this.x;
+            const dy = game.localPlayer.y - this.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            potentialTargets.push({
+                target: game.localPlayer,
+                distance: distance,
+                type: 'player'
+            });
+        }
+
+        // Adicionar outros jogadores
         game.players.forEach((player) => {
             if (player.health <= 0) return;
             
@@ -63,24 +80,61 @@ export class Bot extends Player {
             const dy = player.y - this.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearestPlayer = player;
-            }
+            potentialTargets.push({
+                target: player,
+                distance: distance,
+                type: 'player'
+            });
         });
 
-        // Atualizar estado baseado na distância e saúde
-        if (nearestPlayer) {
-            this.target = nearestPlayer;
+        // Adicionar outros bots
+        game.bots.forEach((bot, botId) => {
+            if (bot === this || bot.health <= 0) return;
+            
+            const dx = bot.x - this.x;
+            const dy = bot.y - this.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (nearestDistance > 500) {
-                this.state = 'wandering';
-            } else if (nearestDistance > 300) {
+            potentialTargets.push({
+                target: bot,
+                distance: distance,
+                type: 'bot'
+            });
+        });
+
+        // Ordenar alvos por distância
+        potentialTargets.sort((a, b) => a.distance - b.distance);
+
+        // Escolher alvo com base em probabilidade e distância
+        if (potentialTargets.length > 0) {
+            // 70% de chance de escolher um dos 3 alvos mais próximos
+            // 30% de chance de escolher aleatoriamente
+            let selectedTarget;
+            if (Math.random() < 0.7 && potentialTargets.length >= 3) {
+                // Escolher aleatoriamente entre os 3 mais próximos
+                const index = Math.floor(Math.random() * Math.min(3, potentialTargets.length));
+                selectedTarget = potentialTargets[index];
+            } else {
+                // Escolher aleatoriamente entre todos
+                selectedTarget = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+            }
+
+            this.target = selectedTarget.target;
+            const distance = selectedTarget.distance;
+
+            // Atualizar estado baseado na distância e saúde
+            if (distance > 400) {
                 this.state = 'chasing';
-            } else if (this.health < 30) {
+            } else if (this.health < 30 && distance < 200) {
                 this.state = 'fleeing';
             } else {
                 this.state = 'attacking';
+            }
+
+            // Adicionar comportamento mais variado
+            if (Math.random() < 0.1) { // 10% de chance de mudar para comportamento aleatório
+                const states = ['wandering', 'chasing', 'attacking', 'fleeing'];
+                this.state = states[Math.floor(Math.random() * states.length)];
             }
         } else {
             this.state = 'wandering';
@@ -100,13 +154,43 @@ export class Bot extends Player {
 
     chase(game) {
         if (this.target) {
-            this.targetX = this.target.x;
-            this.targetY = this.target.y;
+            // Manter uma distância ideal para atirar que varia por bot
+            const idealDistance = 200 + Math.random() * 100;  // 200-300 de distância
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > idealDistance) {
+                // Aproximar com um pouco de variação
+                const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.5;
+                this.targetX = this.target.x - Math.cos(angle) * idealDistance;
+                this.targetY = this.target.y - Math.sin(angle) * idealDistance;
+            } else {
+                // Movimento lateral quando próximo
+                const sideAngle = Math.atan2(dy, dx) + Math.PI/2 * (Math.random() < 0.5 ? 1 : -1);
+                this.targetX = this.x + Math.cos(sideAngle) * 50;
+                this.targetY = this.y + Math.sin(sideAngle) * 50;
+            }
+
+            // Evitar sair da zona segura
+            const distanceToCenter = Math.sqrt(
+                Math.pow(this.targetX - game.safeZone.x, 2) + 
+                Math.pow(this.targetY - game.safeZone.y, 2)
+            );
+
+            if (distanceToCenter > game.safeZone.currentRadius * 0.8) {
+                const angle = Math.atan2(this.targetY - game.safeZone.y, this.targetX - game.safeZone.x);
+                this.targetX = game.safeZone.x + Math.cos(angle) * game.safeZone.currentRadius * 0.7;
+                this.targetY = game.safeZone.y + Math.sin(angle) * game.safeZone.currentRadius * 0.7;
+            }
         }
     }
 
     attack(game) {
-        if (this.target && this.reactionCounter >= this.reactionTime) {
+        if (this.target && 
+            this.reactionCounter >= this.reactionTime && 
+            this.shootCounter >= this.shootInterval) {
+            
             // Adicionar imprecisão ao tiro
             const spread = (1 - this.accuracy) * 100;
             const targetX = this.target.x + (Math.random() - 0.5) * spread;
@@ -116,6 +200,11 @@ export class Bot extends Player {
             if (bullet) {
                 game.bullets.push(bullet);
                 this.reactionCounter = 0;
+                this.shootCounter = 0;
+
+                // Atualizar direção para onde está atirando
+                this.targetX = this.x + (targetX - this.x) * 0.5;
+                this.targetY = this.y + (targetY - this.y) * 0.5;
             }
         }
     }

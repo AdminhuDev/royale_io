@@ -4,29 +4,24 @@ import { NetworkManager } from './NetworkManager.js';
 import { Player } from './Player.js';
 import { Bot } from './Bot.js';
 import { SkinManager } from './SkinManager.js';
+import { SafeZone } from './SafeZone.js';
+import { GridRenderer } from './GridRenderer.js';
+import { EffectManager } from './EffectManager.js';
+import { CONFIG } from './config.js';
 import { updateStats } from './Main.js';
 
 export class Game {
     setupCanvas() {
-        // Ajustar para resolução do dispositivo e zoom
         const updateCanvasSize = () => {
             const pixelRatio = window.devicePixelRatio || 1;
-            
-            // Tamanho lógico (CSS)
             this.canvas.style.width = window.innerWidth + 'px';
             this.canvas.style.height = window.innerHeight + 'px';
-            
-            // Tamanho real do canvas (considerando pixel ratio)
             this.canvas.width = window.innerWidth * pixelRatio;
             this.canvas.height = window.innerHeight * pixelRatio;
-            
-            // Ajustar contexto para pixel ratio
             this.ctx.scale(pixelRatio, pixelRatio);
         };
 
-        // Ocultar cursor do mouse
         this.canvas.style.cursor = 'none';
-
         updateCanvasSize();
         window.addEventListener('resize', updateCanvasSize);
     }
@@ -44,49 +39,34 @@ export class Game {
         this.mouseY = 0;
         this.bullets = [];
         this.frameCount = 0;
-        this.worldWidth = 3000;
-        this.worldHeight = 3000;
+        this.worldWidth = CONFIG.WORLD.WIDTH;
+        this.worldHeight = CONFIG.WORLD.HEIGHT;
         this.isGameOver = false;
         this.gameLoopId = null;
-        this.matchStartTimer = 10;
-        this.minPlayers = 4;
+        this.matchStartTimer = CONFIG.GAME.MATCH_START_TIMER;
+        this.minPlayers = CONFIG.GAME.MIN_PLAYERS;
         this.score = 0;
-        
-        // Efeitos visuais
-        this.healEffects = [];
         
         // Gerenciadores
         this.camera = new Camera(this);
         this.lootManager = new LootManager(this);
         this.networkManager = new NetworkManager(this);
         this.skinManager = new SkinManager();
-        
-        // Zona Segura
-        this.safeZone = {
-            x: this.worldWidth / 2,
-            y: this.worldHeight / 2,
-            maxRadius: 1500,
-            currentRadius: 1500,
-            targetRadius: 0,
-            shrinkSpeed: 0.8,
-            damage: 2,
-            timer: 60,
-            shrinking: false,
-            minRadius: 0,
-            active: true
-        };
+        this.gridRenderer = new GridRenderer(this.worldWidth, this.worldHeight);
+        this.safeZone = new SafeZone(this.worldWidth, this.worldHeight);
+        this.effectManager = new EffectManager(this);
         
         // Campo de estrelas
         this.starField = {
             stars: [],
-            numStars: 200,
-            speed: 0.5,
+            numStars: CONFIG.STAR_FIELD.NUM_STARS,
+            speed: CONFIG.STAR_FIELD.SPEED,
             init: () => {
                 for (let i = 0; i < this.starField.numStars; i++) {
                     this.starField.stars.push({
                         x: Math.random() * this.worldWidth,
                         y: Math.random() * this.worldHeight,
-                        size: Math.random() * 2 + 1,
+                        size: Math.random() * (CONFIG.STAR_FIELD.MAX_SIZE - CONFIG.STAR_FIELD.MIN_SIZE) + CONFIG.STAR_FIELD.MIN_SIZE,
                         speed: Math.random() * 0.5 + 0.1
                     });
                 }
@@ -231,30 +211,58 @@ export class Game {
             bullet.y += bullet.dirY * bullet.speed;
             bullet.lifetime--;
 
-            // Verificar colisão com jogadores
-            this.players.forEach((player, playerId) => {
-                // Não verificar colisão com o próprio jogador
-                if (playerId === this.networkManager.playerId) return;
-                
-                if (this.checkBulletCollision(bullet, player)) {
-                    // Aplicar dano
-                    player.health -= bullet.damage;
+            // Verificar colisão com jogador local
+            if (bullet && this.localPlayer && bullet.playerId !== 'local') {
+                if (this.checkBulletCollision(bullet, this.localPlayer)) {
+                    // Aplicar dano ao jogador local
+                    this.localPlayer.health -= bullet.damage;
                     
-                    // Enviar atualização do dano
-                    if (this.networkManager) {
-                        this.networkManager.sendHit(playerId, bullet.damage);
+                    // Efeito visual de dano usando o EffectManager
+                    const hitAngle = Math.atan2(bullet.dirY, bullet.dirX);
+                    this.effectManager.effects.push({
+                        x: this.localPlayer.x + Math.cos(hitAngle) * this.localPlayer.radius,
+                        y: this.localPlayer.y + Math.sin(hitAngle) * this.localPlayer.radius,
+                        opacity: 1,
+                        yOffset: 0,
+                        type: 'damage',
+                        color: '#ff0000'
+                    });
+
+                    // Verificar se o jogador morreu
+                    if (this.localPlayer.health <= 0) {
+                        this.localPlayer.health = 0;
+                        this.handleGameOver(false);
                     }
-                    
+
                     // Remover projétil
                     this.bullets.splice(i, 1);
-                    return;
+                    continue;
+                }
+            }
+
+            // Verificar colisão com outros jogadores
+            this.players.forEach((player, playerId) => {
+                if (bullet && playerId !== bullet.playerId) {
+                    if (this.checkBulletCollision(bullet, player)) {
+                        // Aplicar dano
+                        player.health -= bullet.damage;
+                        
+                        // Enviar atualização do dano
+                        if (this.networkManager) {
+                            this.networkManager.sendHit(playerId, bullet.damage);
+                        }
+                        
+                        // Remover projétil
+                        this.bullets.splice(i, 1);
+                        return;
+                    }
                 }
             });
 
             // Verificar colisão com bots
             if (bullet) {
                 this.bots.forEach((bot, botId) => {
-                    if (this.checkBulletCollision(bullet, bot)) {
+                    if (bullet.playerId !== botId && this.checkBulletCollision(bullet, bot)) {
                         // Aplicar dano ao bot
                         bot.health -= bullet.damage;
                         
@@ -262,7 +270,7 @@ export class Game {
                         if (bot.health <= 0) {
                             this.bots.delete(botId);
                             // Aumentar score do jogador local
-                            if (this.localPlayer) {
+                            if (this.localPlayer && bullet.playerId === 'local') {
                                 this.localPlayer.kills++;
                                 this.score += 100;
                                 this.localPlayer.score = this.score;
@@ -361,6 +369,8 @@ export class Game {
     }
 
     handleGameOver(isVictory = false) {
+        if (this.isGameOver) return;  // Evitar múltiplos game overs
+        
         this.isGameOver = true;
         this.gameState = 'ended';
         if (this.gameLoopId) {
@@ -387,7 +397,7 @@ export class Game {
             }
 
             if (finalScoreElement) finalScoreElement.textContent = this.score;
-            if (finalKillsElement) finalKillsElement.textContent = this.localPlayer.kills;
+            if (finalKillsElement && this.localPlayer) finalKillsElement.textContent = this.localPlayer.kills;
             if (finalTimeElement) {
                 const minutes = Math.floor(this.frameCount / (60 * 60));
                 const seconds = Math.floor((this.frameCount / 60) % 60);
@@ -400,7 +410,7 @@ export class Game {
             stats.lastScore = this.score;
             stats.highScore = Math.max(stats.highScore || 0, this.score);
             stats.totalPoints = (stats.totalPoints || 0) + this.score;
-            stats.totalKills = (stats.totalKills || 0) + this.localPlayer.kills;
+            stats.totalKills = (stats.totalKills || 0) + (this.localPlayer ? this.localPlayer.kills : 0);
             stats.wins = (stats.wins || 0) + (isVictory ? 1 : 0);
             
             localStorage.setItem('gameStats', JSON.stringify(stats));
@@ -411,17 +421,6 @@ export class Game {
             // Esconder UI do jogo e mostrar tela de game over
             if (gameUI) gameUI.style.display = 'none';
             gameOverScreen.style.display = 'flex';
-
-            // Atualizar estatísticas na tela inicial
-            const highScoreElement = document.getElementById('high-score-value');
-            const lastScoreElement = document.getElementById('last-score-value');
-            const totalKillsElement = document.getElementById('total-kills-value');
-            const winsElement = document.getElementById('wins-value');
-
-            if (highScoreElement) highScoreElement.textContent = stats.highScore;
-            if (lastScoreElement) lastScoreElement.textContent = stats.lastScore;
-            if (totalKillsElement) totalKillsElement.textContent = stats.totalKills;
-            if (winsElement) winsElement.textContent = stats.wins;
         }
     }
 
@@ -441,16 +440,13 @@ export class Game {
                 break;
 
             case 'running':
-                // Atualizar escudo do jogador local
                 if (this.localPlayer) {
                     this.localPlayer.updateShield();
                     
-                    // Recarregar escudo lentamente
                     if (this.localPlayer.shield < 100 && this.localPlayer.shieldCooldown <= 0) {
                         this.localPlayer.shield = Math.min(100, this.localPlayer.shield + 0.1);
                     }
                     
-                    // Atualizar UI do escudo
                     const shieldElement = document.getElementById('shield');
                     const shieldCooldown = document.getElementById('shield-cooldown');
                     
@@ -471,19 +467,15 @@ export class Game {
                 this.bots.forEach(bot => bot.update(this));
                 this.movePlayer();
                 this.updateBullets();
-                this.updateSafeZone();
+                this.safeZone.update();
                 this.lootManager.update();
                 this.camera.update();
                 this.updateMouseWorldPosition();
-                this.updateEffects();
+                this.effectManager.update();
 
                 if (this.networkManager && this.localPlayer) {
                     this.networkManager.sendPosition();
                 }
-                break;
-
-            case 'ended':
-                this.camera.update();
                 break;
         }
     }
@@ -504,15 +496,26 @@ export class Game {
             });
         }
         
-        // Adicionar bots faltantes
+        // Adicionar bots faltantes com distribuição melhor
         while (this.bots.size < botsNeeded) {
             const botId = `bot_${Date.now()}_${Math.random()}`;
-            const angle = Math.random() * Math.PI * 2;
-            const radius = Math.random() * this.safeZone.currentRadius * 0.8;
+            
+            // Distribuir bots em um padrão circular ao redor do centro
+            const numSectors = this.minPlayers - 1; // -1 para o jogador local
+            const sectorAngle = (Math.PI * 2) / numSectors;
+            const currentSector = this.bots.size;
+            const angle = sectorAngle * currentSector + (Math.random() - 0.5) * sectorAngle * 0.5;
+            
+            // Variar a distância do centro para cada bot
+            const minRadius = this.safeZone.currentRadius * 0.3;
+            const maxRadius = this.safeZone.currentRadius * 0.7;
+            const radius = minRadius + Math.random() * (maxRadius - minRadius);
+            
             const x = this.safeZone.x + Math.cos(angle) * radius;
             const y = this.safeZone.y + Math.sin(angle) * radius;
             
-            const bot = new Bot(x, y);
+            const bot = new Bot(x, y, this);
+            bot.skinColor = '#ff8800';  // Cor laranja para bots
             this.bots.set(botId, bot);
         }
 
@@ -527,7 +530,7 @@ export class Game {
         this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
         this.camera.begin(this.ctx);
-        this.renderGrid();
+        this.gridRenderer.render(this.ctx);
 
         switch (this.gameState) {
             case 'waiting':
@@ -560,41 +563,12 @@ export class Game {
                     this.localPlayer.render(this.ctx, this.mouseX, this.mouseY, true, this.skinManager, this.frameCount);
                 }
 
-                this.renderEffects();
-                break;
-
-            case 'ended':
-                this.renderEndScreen();
+                this.effectManager.render(this.ctx);
                 break;
         }
 
         this.camera.end(this.ctx);
         this.updateUI();
-    }
-
-    renderGrid() {
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        const gridSize = 100;
-        
-        for (let x = 0; x <= this.worldWidth; x += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.worldHeight);
-            this.ctx.stroke();
-        }
-        
-        for (let y = 0; y <= this.worldHeight; y += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.worldWidth, y);
-            this.ctx.stroke();
-        }
-
-        // Borda do mundo
-        this.ctx.strokeStyle = '#ff0000';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(0, 0, this.worldWidth, this.worldHeight);
     }
 
     renderSafeZone() {
@@ -865,18 +839,6 @@ export class Game {
 
     renderEndScreen() {
         // Implementar renderização da tela de fim de jogo
-    }
-
-    showHealEffect(amount) {
-        if (this.localPlayer) {
-            this.healEffects.push({
-                x: this.localPlayer.x,
-                y: this.localPlayer.y - this.localPlayer.radius - 40,
-                amount: amount,
-                opacity: 1,
-                yOffset: 0
-            });
-        }
     }
 
     updateEffects() {
