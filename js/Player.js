@@ -111,16 +111,16 @@ export class Player {
 
     takeDamage(damage) {
         if (this.shieldActive) {
-            // Reduzir dano pelo escudo
-            const shieldDamage = damage * 0.5; // Escudo absorve 50% do dano
+            // Escudo absorve 80% do dano
+            const shieldDamage = damage * 0.8;
             this.shield -= shieldDamage;
             
             if (this.shield <= 0) {
                 this.shield = 0;
                 this.shieldActive = false;
                 this.shieldCooldown = this.shieldCooldownMax;
-                // Dano restante vai para a vida
-                this.health -= damage * 0.5;
+                // Apenas 20% do dano vai para a vida
+                this.health -= damage * 0.2;
             }
         } else {
             this.health -= damage;

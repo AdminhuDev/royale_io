@@ -36,8 +36,8 @@ export class LootManager {
                             const curaEfetiva = Math.min(curaTotal, 100 - this.game.localPlayer.health);
                             this.game.localPlayer.heal(curaEfetiva);
                             
-                            // Efeito visual de cura
-                            this.game.showHealEffect(curaEfetiva);
+                            // Efeito visual de cura usando o EffectManager
+                            this.game.effectManager.showHealEffect(curaEfetiva);
                         }
                     } else if (loot.type === 'ammo') {
                         this.game.localPlayer.addAmmo(30);
