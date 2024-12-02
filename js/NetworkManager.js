@@ -67,7 +67,10 @@ export class NetworkManager {
 
                 case 'player_joined':
                     if (message.playerId !== this.playerId && message.data) {
-                        this.game.addPlayer(message.playerId, message.data);
+                        const player = this.game.addPlayer(message.playerId, message.data);
+                        if (player) {
+                            player.updateFromNetwork(message.data);
+                        }
                         if (this.game.gameState === 'waiting' && 
                             this.game.players.size + 1 >= 2) {
                             this.game.gameState = 'starting';
@@ -93,7 +96,10 @@ export class NetworkManager {
                         message.playerId !== this.playerId && 
                         this.game.players.has(message.playerId) &&
                         message.data) {
-                        this.game.updatePlayer(message.playerId, message.data);
+                        const player = this.game.players.get(message.playerId);
+                        if (player) {
+                            player.updateFromNetwork(message.data);
+                        }
                     }
                     break;
 
@@ -138,7 +144,9 @@ export class NetworkManager {
                 y: this.game.localPlayer.y,
                 health: this.game.localPlayer.health,
                 score: this.game.localPlayer.score,
-                kills: this.game.localPlayer.kills
+                kills: this.game.localPlayer.kills,
+                skinId: this.game.skinManager.currentSkin,
+                skinColor: this.game.localPlayer.skinColor
             }
         });
     }
@@ -153,7 +161,9 @@ export class NetworkManager {
                 y: this.game.localPlayer.y,
                 health: this.game.localPlayer.health,
                 score: this.game.localPlayer.score,
-                kills: this.game.localPlayer.kills
+                kills: this.game.localPlayer.kills,
+                skinId: this.game.skinManager.currentSkin,
+                skinColor: this.game.localPlayer.skinColor
             }
         });
     }

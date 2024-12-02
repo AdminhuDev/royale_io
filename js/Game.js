@@ -386,13 +386,15 @@ export class Game {
 
     addPlayer(playerId, data) {
         const player = new Player(data.x, data.y, false, this);
+        player.id = playerId;
         player.name = data.name;
         player.health = data.health;
         player.score = data.score;
         player.kills = data.kills;
-        player.id = playerId;
-        player.skinColor = data.skinColor || '#ff4444';
+        player.skinId = data.skinId || 'default';
+        player.updateSkinColor();
         this.players.set(playerId, player);
+        return player;
     }
 
     removePlayer(playerId) {
@@ -402,11 +404,9 @@ export class Game {
     updatePlayer(playerId, data) {
         const player = this.players.get(playerId);
         if (player) {
-            Object.assign(player, data);
-            if (player.health <= 0) {
-                this.players.delete(playerId);
-            }
+            player.updateFromNetwork(data);
         }
+        return player;
     }
 
     destroy() {

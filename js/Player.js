@@ -19,8 +19,38 @@ export class Player {
         this.isLocal = isLocal;
         this.name = '';
         this.id = '';
-        this.skinColor = '#fff';
         this.game = game;
+
+        // Propriedades da skin
+        this.skinId = isLocal ? (game ? game.skinManager.currentSkin : 'default') : 'default';
+        this.skinColor = '#fff';
+        this.updateSkinColor();
+    }
+
+    updateSkinColor() {
+        if (this.game && this.game.skinManager) {
+            const skin = this.game.skinManager.skins[this.skinId];
+            if (skin) {
+                this.skinColor = skin.color === 'rainbow' ? 
+                    `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
+                    skin.color;
+            }
+        }
+    }
+
+    // Método para atualizar dados do jogador recebidos da rede
+    updateFromNetwork(data) {
+        this.x = data.x;
+        this.y = data.y;
+        this.health = data.health;
+        this.score = data.score;
+        this.kills = data.kills;
+        
+        // Atualizar skin
+        if (data.skinId) {
+            this.skinId = data.skinId;
+            this.updateSkinColor();
+        }
     }
 
     move(targetX, targetY, worldWidth, worldHeight) {
@@ -204,22 +234,22 @@ export class Player {
 
     render(ctx, mouseX, mouseY, isLocal = false) {
         // Atualizar cor da skin rainbow se necessário
-        if (isLocal && this.game) {
-            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
-            if (skin.color === 'rainbow') {
+        if (this.game) {
+            const skin = this.game.skinManager.skins[this.skinId || 'default'];
+            if (skin && skin.color === 'rainbow') {
                 this.skinColor = `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)`;
             }
         }
 
         // Efeitos de partículas baseados na skin
-        if (this.game && isLocal) {  // Apenas para jogadores, não para bots
-            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
+        if (this.game) {  // Removido o isLocal para mostrar efeitos em todos os jogadores
+            const skin = this.game.skinManager.skins[this.skinId || 'default'];
             const particleColor = skin.color === 'rainbow' ? 
                 `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
                 skin.color;
 
             // Efeitos específicos por skin
-            switch(this.game.skinManager.currentSkin) {
+            switch(this.skinId || 'default') {
                 case 'default': // Espírito Lunar
                     // Aura lunar pulsante
                     const lunarPulse = 0.5 + Math.sin(this.game.frameCount * 0.05) * 0.3;
@@ -374,7 +404,7 @@ export class Player {
                         ctx.translate(x, y);
                         ctx.rotate(angle);
                         
-                        // S��mbolo
+                        // Smbolo
                         ctx.beginPath();
                         ctx.moveTo(-5, -5);
                         ctx.lineTo(5, -5);
