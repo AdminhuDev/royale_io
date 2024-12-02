@@ -6,16 +6,21 @@ export class Bot extends Player {
         this.name = this.generateBotName();
         this.targetX = x;
         this.targetY = y;
-        this.updateInterval = 60; // Atualiza alvo a cada 60 frames
+        this.updateInterval = 60;
         this.updateCounter = 0;
-        this.state = 'wandering'; // wandering, chasing, attacking, fleeing
+        this.state = 'wandering';
         this.target = null;
-        this.reactionTime = Math.random() * 5 + 5; // 5-10 frames de delay
+        this.reactionTime = Math.random() * 5 + 5;
         this.reactionCounter = 0;
-        this.accuracy = Math.random() * 0.3 + 0.6; // 60-90% de precisão
-        this.shootInterval = Math.random() * 20 + 30; // 30-50 frames entre tiros
+        this.accuracy = Math.random() * 0.3 + 0.6;
+        this.shootInterval = Math.random() * 20 + 30;
         this.shootCounter = 0;
-        this.ammo = Infinity; // Munição infinita para bots
+        this.ammo = Infinity;
+        
+        // Usar apenas a skin padrão
+        if (game && game.skinManager) {
+            this.skinColor = game.skinManager.skins.default.color;
+        }
     }
 
     generateBotName() {
@@ -198,7 +203,7 @@ export class Bot extends Player {
 
             const bullet = this.shoot(targetX, targetY);
             if (bullet) {
-                game.bullets.push(bullet);
+                game.bulletManager.addBullet(bullet);
                 this.reactionCounter = 0;
                 this.shootCounter = 0;
 
@@ -234,17 +239,84 @@ export class Bot extends Player {
     }
 
     render(ctx) {
-        // Renderizar com uma cor diferente para identificar que é um bot
+        // Renderizar efeitos da skin padrão (Espírito Lunar)
+        if (this.game) {
+            // Aura lunar pulsante
+            const lunarPulse = 0.5 + Math.sin(this.game.frameCount * 0.05) * 0.3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${lunarPulse * 0.2})`;
+            ctx.fill();
+            ctx.closePath();
+
+            // Estrelas orbitantes
+            for (let i = 0; i < 5; i++) {
+                const angle = (this.game.frameCount * 0.02) + (i * Math.PI * 2 / 5);
+                const x = this.x + Math.cos(angle) * (30 + Math.sin(this.game.frameCount * 0.05) * 5);
+                const y = this.y + Math.sin(angle) * (30 + Math.sin(this.game.frameCount * 0.05) * 5);
+                
+                // Estrela
+                const starSize = 2 + Math.sin(this.game.frameCount * 0.1 + i) * 1;
+                ctx.beginPath();
+                ctx.arc(x, y, starSize, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + Math.sin(this.game.frameCount * 0.1 + i) * 0.3})`;
+                ctx.fill();
+                ctx.closePath();
+
+                // Rastro da estrela
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x - Math.cos(angle) * 5, y - Math.sin(angle) * 5);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        // Renderizar o bot
         const originalFillStyle = ctx.fillStyle;
+        ctx.fillStyle = this.skinColor;
         
-        // Cor base laranja, mais vermelha quando com pouca vida
-        const healthPercent = this.health / 100;
-        const red = Math.min(255, Math.round(255 * (1 + (1 - healthPercent))));
-        const green = Math.min(255, Math.round(140 * healthPercent));
-        ctx.fillStyle = `rgb(${red}, ${green}, 0)`;
-        
-        super.render(ctx);
-        ctx.fillStyle = originalFillStyle;
+        // Desenhar o corpo do bot
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+
+        // Nome do bot
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.name, this.x, this.y - this.radius - 10);
+
+        // Barra de vida
+        const barWidth = 40;
+        const barHeight = 4;
+        const barSpacing = 5;
+
+        // Barra de vida (vermelha/verde)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth, barHeight);
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20, barWidth * (this.health/100), barHeight);
+
+        // Barra de escudo (azul)
+        if (this.shield > 0) {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20 - barHeight - barSpacing, barWidth, barHeight);
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(this.x - barWidth/2, this.y - this.radius - 20 - barHeight - barSpacing, barWidth * (this.shield/100), barHeight);
+        }
+
+        // Efeito visual do escudo ativo
+        if (this.shieldActive) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(33, 150, 243, ${0.5 + Math.sin(Date.now() * 0.01) * 0.2})`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.closePath();
+        }
 
         // Mostrar estado do bot acima do nome
         ctx.font = '12px Arial';
@@ -255,5 +327,7 @@ export class Bot extends Player {
             this.x,
             this.y - this.radius - 30
         );
+
+        ctx.fillStyle = originalFillStyle;
     }
 } 

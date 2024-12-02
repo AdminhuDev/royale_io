@@ -32,16 +32,80 @@ export class Player {
             const dirX = (dx / distance) * this.speed;
             const dirY = (dy / distance) * this.speed;
 
-            // Verificar limites do mundo
-            const newX = this.x + dirX;
-            const newY = this.y + dirY;
+            // Calcular nova posição
+            let newX = this.x + dirX;
+            let newY = this.y + dirY;
 
-            if (newX >= this.radius && newX <= worldWidth - this.radius) {
-                this.x = newX;
+            // Verificar limites do mundo
+            newX = Math.max(this.radius, Math.min(worldWidth - this.radius, newX));
+            newY = Math.max(this.radius, Math.min(worldHeight - this.radius, newY));
+
+            // Verificar e resolver colisões
+            if (this.game) {
+                let totalPushX = 0;
+                let totalPushY = 0;
+                let collisionCount = 0;
+
+                // Verificar jogadores
+                this.game.players.forEach((player) => {
+                    if (player !== this && player.health > 0) {
+                        const playerDx = newX - player.x;
+                        const playerDy = newY - player.y;
+                        const playerDistance = Math.sqrt(playerDx * playerDx + playerDy * playerDy);
+                        const minDistance = this.radius + player.radius;
+
+                        if (playerDistance < minDistance) {
+                            // Calcular vetor de empurrão
+                            const pushStrength = (minDistance - playerDistance) / minDistance;
+                            const pushX = (playerDx / playerDistance) * pushStrength * this.speed;
+                            const pushY = (playerDy / playerDistance) * pushStrength * this.speed;
+                            
+                            totalPushX += pushX;
+                            totalPushY += pushY;
+                            collisionCount++;
+                        }
+                    }
+                });
+
+                // Verificar bots
+                this.game.bots.forEach((bot) => {
+                    if (bot !== this && bot.health > 0) {
+                        const botDx = newX - bot.x;
+                        const botDy = newY - bot.y;
+                        const botDistance = Math.sqrt(botDx * botDx + botDy * botDy);
+                        const minDistance = this.radius + bot.radius;
+
+                        if (botDistance < minDistance) {
+                            // Calcular vetor de empurrão
+                            const pushStrength = (minDistance - botDistance) / minDistance;
+                            const pushX = (botDx / botDistance) * pushStrength * this.speed;
+                            const pushY = (botDy / botDistance) * pushStrength * this.speed;
+                            
+                            totalPushX += pushX;
+                            totalPushY += pushY;
+                            collisionCount++;
+                        }
+                    }
+                });
+
+                // Aplicar média dos vetores de empurrão
+                if (collisionCount > 0) {
+                    const avgPushX = totalPushX / collisionCount;
+                    const avgPushY = totalPushY / collisionCount;
+                    
+                    // Aplicar deslizamento
+                    newX = this.x + (dirX + avgPushX) * 0.5;
+                    newY = this.y + (dirY + avgPushY) * 0.5;
+                    
+                    // Verificar limites do mundo novamente
+                    newX = Math.max(this.radius, Math.min(worldWidth - this.radius, newX));
+                    newY = Math.max(this.radius, Math.min(worldHeight - this.radius, newY));
+                }
             }
-            if (newY >= this.radius && newY <= worldHeight - this.radius) {
-                this.y = newY;
-            }
+
+            // Atualizar posição
+            this.x = newX;
+            this.y = newY;
         }
     }
 
@@ -148,7 +212,7 @@ export class Player {
         }
 
         // Efeitos de partículas baseados na skin
-        if (this.game) {
+        if (this.game && isLocal) {  // Apenas para jogadores, não para bots
             const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
             const particleColor = skin.color === 'rainbow' ? 
                 `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
@@ -310,7 +374,7 @@ export class Player {
                         ctx.translate(x, y);
                         ctx.rotate(angle);
                         
-                        // Símbolo
+                        // S��mbolo
                         ctx.beginPath();
                         ctx.moveTo(-5, -5);
                         ctx.lineTo(5, -5);

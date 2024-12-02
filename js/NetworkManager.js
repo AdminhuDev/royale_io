@@ -59,52 +59,62 @@ export class NetworkManager {
     }
 
     handleMessage(message) {
-        switch (message.type) {
-            case 'join_ack':
-                this.playerId = message.playerId;
-                break;
+        try {
+            switch (message.type) {
+                case 'join_ack':
+                    this.playerId = message.playerId;
+                    break;
 
-            case 'player_joined':
-                if (message.playerId !== this.playerId) {
-                    this.game.addPlayer(message.playerId, message.data);
-                    if (this.game.gameState === 'waiting' && 
-                        this.game.players.size + 1 >= 2) {
-                        this.game.gameState = 'starting';
+                case 'player_joined':
+                    if (message.playerId !== this.playerId && message.data) {
+                        this.game.addPlayer(message.playerId, message.data);
+                        if (this.game.gameState === 'waiting' && 
+                            this.game.players.size + 1 >= 2) {
+                            this.game.gameState = 'starting';
+                        }
                     }
-                }
-                break;
+                    break;
 
-            case 'player_left':
-            case 'player_died':
-                if (message.playerId !== this.playerId) {
-                    this.game.removePlayer(message.playerId);
-                }
-                break;
+                case 'player_left':
+                case 'player_died':
+                    if (message.playerId !== this.playerId) {
+                        this.game.removePlayer(message.playerId);
+                    }
+                    break;
 
-            case 'game_state':
-                this.handleGameState(message.data);
-                break;
+                case 'game_state':
+                    if (message.data) {
+                        this.handleGameState(message.data);
+                    }
+                    break;
 
-            case 'player_update':
-                if (this.game.gameState !== 'running') return;
-                if (message.playerId !== this.playerId) {
-                    this.game.updatePlayer(message.playerId, message.data);
-                }
-                break;
+                case 'player_update':
+                    if (this.game.gameState === 'running' && 
+                        message.playerId !== this.playerId && 
+                        this.game.players.has(message.playerId) &&
+                        message.data) {
+                        this.game.updatePlayer(message.playerId, message.data);
+                    }
+                    break;
 
-            case 'bullet_created':
-                if (this.game.gameState !== 'running') return;
-                if (message.playerId !== this.playerId) {
-                    this.game.addBullet(message.data);
-                }
-                break;
+                case 'bullet_created':
+                    if (this.game.gameState === 'running' && 
+                        message.playerId !== this.playerId &&
+                        message.data) {
+                        this.game.addBullet(message.data);
+                    }
+                    break;
 
-            case 'player_hit':
-                if (this.game.gameState !== 'running') return;
-                if (message.playerId === this.playerId) {
-                    this.game.handleHit(message.data.damage);
-                }
-                break;
+                case 'player_hit':
+                    if (this.game.gameState === 'running' && 
+                        message.playerId === this.playerId &&
+                        message.data) {
+                        this.game.handleHit(message.data.damage);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Erro ao processar mensagem:', error, message);
         }
     }
 
