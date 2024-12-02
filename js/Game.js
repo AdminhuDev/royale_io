@@ -76,6 +76,33 @@ export class Game {
             active: true
         };
         
+        // Campo de estrelas
+        this.starField = {
+            stars: [],
+            numStars: 200,
+            speed: 0.5,
+            init: () => {
+                for (let i = 0; i < this.starField.numStars; i++) {
+                    this.starField.stars.push({
+                        x: Math.random() * this.worldWidth,
+                        y: Math.random() * this.worldHeight,
+                        size: Math.random() * 2 + 1,
+                        speed: Math.random() * 0.5 + 0.1
+                    });
+                }
+            },
+            update: () => {
+                for (let star of this.starField.stars) {
+                    star.y += star.speed * this.starField.speed;
+                    if (star.y > this.worldHeight) {
+                        star.y = 0;
+                        star.x = Math.random() * this.worldWidth;
+                    }
+                }
+            }
+        };
+        this.starField.init();
+        
         // Inicialização
         this.setupCanvas();
         this.setupEvents();
@@ -562,22 +589,64 @@ export class Game {
     }
 
     renderSafeZone() {
-        // Desenhar círculo da zona segura
+        // Atualizar campo de estrelas
+        this.starField.update();
+
+        // Área fora da zona
+        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        this.ctx.fillRect(0, 0, this.worldWidth, this.worldHeight);
+        
+        // Salvar contexto para clipping
+        this.ctx.save();
+        
+        // Criar máscara para a zona segura
+        this.ctx.beginPath();
+        this.ctx.arc(this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius, 0, Math.PI * 2);
+        this.ctx.clip();
+        
+        // Limpar área da zona segura
+        this.ctx.clearRect(0, 0, this.worldWidth, this.worldHeight);
+        
+        // Desenhar fundo espacial
+        const gradient = this.ctx.createRadialGradient(
+            this.safeZone.x, this.safeZone.y, 0,
+            this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius
+        );
+        gradient.addColorStop(0, 'rgba(25, 25, 112, 0.2)');  // Azul escuro
+        gradient.addColorStop(1, 'rgba(0, 0, 30, 0.4)');     // Quase preto
+        
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, this.worldWidth, this.worldHeight);
+        
+        // Desenhar estrelas
+        for (const star of this.starField.stars) {
+            const distance = Math.sqrt(
+                Math.pow(star.x - this.safeZone.x, 2) + 
+                Math.pow(star.y - this.safeZone.y, 2)
+            );
+            
+            if (distance <= this.safeZone.currentRadius) {
+                this.ctx.beginPath();
+                this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.random() * 0.7})`;
+                this.ctx.fill();
+                
+                // Brilho da estrela
+                this.ctx.beginPath();
+                this.ctx.arc(star.x, star.y, star.size * 2, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + Math.random() * 0.2})`;
+                this.ctx.fill();
+            }
+        }
+        
+        this.ctx.restore();
+        
+        // Borda da zona segura
         this.ctx.beginPath();
         this.ctx.arc(this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius, 0, Math.PI * 2);
         this.ctx.strokeStyle = '#4CAF50';
         this.ctx.lineWidth = 2;
         this.ctx.stroke();
-
-        // Área fora da zona
-        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-        this.ctx.fillRect(0, 0, this.worldWidth, this.worldHeight);
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.arc(this.safeZone.x, this.safeZone.y, this.safeZone.currentRadius, 0, Math.PI * 2);
-        this.ctx.clip();
-        this.ctx.clearRect(0, 0, this.worldWidth, this.worldHeight);
-        this.ctx.restore();
     }
 
     renderBullets() {
