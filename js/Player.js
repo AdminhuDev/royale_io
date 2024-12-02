@@ -154,86 +154,228 @@ export class Player {
                 `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)` : 
                 skin.color;
 
-            // Desenhar partículas
-            for (let i = 0; i < 3; i++) {
-                const angle = (Math.PI * 2 / 3) * i + (this.game.frameCount * 0.02);
-                const distance = 25 + Math.sin(this.game.frameCount * 0.1) * 5;
-                const x = this.x + Math.cos(angle) * distance;
-                const y = this.y + Math.sin(angle) * distance;
-                
-                ctx.beginPath();
-                ctx.arc(x, y, 2, 0, Math.PI * 2);
-                ctx.fillStyle = particleColor;
-                ctx.globalAlpha = 0.5 + Math.sin(this.game.frameCount * 0.1) * 0.3;
-                ctx.fill();
-                ctx.globalAlpha = 1;
-                ctx.closePath();
+            // Efeitos específicos por skin
+            switch(this.game.skinManager.currentSkin) {
+                case 'default': // Espírito Lunar
+                    // Aura lunar pulsante
+                    const lunarPulse = 0.5 + Math.sin(this.game.frameCount * 0.05) * 0.3;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${lunarPulse * 0.2})`;
+                    ctx.fill();
+                    ctx.closePath();
 
-                // Efeitos específicos por skin
-                switch(this.game.skinManager.currentSkin) {
-                    case 'default': // Espírito Lunar
-                        // Partículas brilhantes que pulsam
+                    // Estrelas orbitantes
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (this.game.frameCount * 0.02) + (i * Math.PI * 2 / 5);
+                        const x = this.x + Math.cos(angle) * (30 + Math.sin(this.game.frameCount * 0.05) * 5);
+                        const y = this.y + Math.sin(angle) * (30 + Math.sin(this.game.frameCount * 0.05) * 5);
+                        
+                        // Estrela
+                        const starSize = 2 + Math.sin(this.game.frameCount * 0.1 + i) * 1;
                         ctx.beginPath();
-                        ctx.arc(x, y, 4, 0, Math.PI * 2);
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        ctx.arc(x, y, starSize, 0, Math.PI * 2);
+                        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + Math.sin(this.game.frameCount * 0.1 + i) * 0.3})`;
                         ctx.fill();
                         ctx.closePath();
-                        break;
 
-                    case 'red': // Chama Infernal
-                        // Partículas de fogo que sobem
-                        const fireY = y - Math.random() * 5;
+                        // Rastro da estrela
                         ctx.beginPath();
-                        ctx.arc(x + Math.sin(this.game.frameCount * 0.1) * 2, fireY, 3, 0, Math.PI * 2);
-                        ctx.fillStyle = 'rgba(255, 100, 0, 0.3)';
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x - Math.cos(angle) * 5, y - Math.sin(angle) * 5);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                        ctx.stroke();
+                        ctx.closePath();
+                    }
+                    break;
+
+                case 'red': // Chama Infernal
+                    // Aura de fogo
+                    const fireGlow = 0.3 + Math.sin(this.game.frameCount * 0.1) * 0.1;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 50, 0, ${fireGlow})`;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Partículas de fogo
+                    for (let i = 0; i < 8; i++) {
+                        const angle = Math.PI * 2 * Math.random();
+                        const distance = this.radius + Math.random() * 20;
+                        const x = this.x + Math.cos(angle) * distance;
+                        const y = this.y + Math.sin(angle) * distance - Math.random() * 10;
+                        
+                        // Chama
+                        ctx.beginPath();
+                        ctx.moveTo(x - 3, y + 6);
+                        ctx.quadraticCurveTo(x, y - 6, x + 3, y + 6);
+                        ctx.fillStyle = `rgba(255, ${50 + Math.random() * 150}, 0, ${0.5 + Math.random() * 0.5})`;
                         ctx.fill();
                         ctx.closePath();
-                        break;
+                    }
+                    break;
 
-                    case 'blue': // Gelo Eterno
-                        // Cristais de gelo girando
+                case 'blue': // Gelo Eterno
+                    // Aura gelada
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 12, 0, Math.PI * 2);
+                    const iceGradient = ctx.createRadialGradient(
+                        this.x, this.y, this.radius,
+                        this.x, this.y, this.radius + 12
+                    );
+                    iceGradient.addColorStop(0, 'rgba(100, 200, 255, 0.3)');
+                    iceGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
+                    ctx.fillStyle = iceGradient;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Cristais de gelo
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (this.game.frameCount * 0.02) + (i * Math.PI * 2 / 6);
+                        const x = this.x + Math.cos(angle) * 25;
+                        const y = this.y + Math.sin(angle) * 25;
+
                         ctx.save();
                         ctx.translate(x, y);
-                        ctx.rotate(this.game.frameCount * 0.05);
+                        ctx.rotate(angle + this.game.frameCount * 0.02);
+                        
+                        // Cristal
                         ctx.beginPath();
-                        ctx.moveTo(-4, 0);
-                        ctx.lineTo(4, 0);
-                        ctx.moveTo(0, -4);
-                        ctx.lineTo(0, 4);
-                        ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+                        ctx.moveTo(0, -5);
+                        ctx.lineTo(3, 0);
+                        ctx.lineTo(0, 5);
+                        ctx.lineTo(-3, 0);
+                        ctx.closePath();
+                        ctx.fillStyle = `rgba(150, 220, 255, ${0.6 + Math.sin(this.game.frameCount * 0.1) * 0.2})`;
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                         ctx.stroke();
+                        
                         ctx.restore();
-                        break;
+                    }
+                    break;
 
-                    case 'green': // Veneno Ancestral
-                        // Bolhas de veneno que flutuam
-                        const bubbleY = y + Math.sin(this.game.frameCount * 0.1 + i) * 3;
+                case 'green': // Veneno Ancestral
+                    // Aura tóxica
+                    const toxicPulse = 0.3 + Math.sin(this.game.frameCount * 0.05) * 0.1;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 15, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 255, 0, ${toxicPulse})`;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Bolhas de veneno
+                    for (let i = 0; i < 12; i++) {
+                        const time = this.game.frameCount * 0.05 + i;
+                        const angle = time + (i * Math.PI * 2 / 12);
+                        const distance = 20 + Math.sin(time * 0.5) * 10;
+                        const x = this.x + Math.cos(angle) * distance;
+                        const y = this.y + Math.sin(angle) * distance;
+                        
+                        // Bolha
+                        const bubbleSize = 2 + Math.sin(time) * 1;
                         ctx.beginPath();
-                        ctx.arc(x, bubbleY, 2 + Math.random(), 0, Math.PI * 2);
-                        ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+                        ctx.arc(x, y, bubbleSize, 0, Math.PI * 2);
+                        const gradient = ctx.createRadialGradient(x, y, 0, x, y, bubbleSize);
+                        gradient.addColorStop(0, 'rgba(150, 255, 150, 0.8)');
+                        gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+                        ctx.fillStyle = gradient;
                         ctx.fill();
                         ctx.closePath();
-                        break;
+                    }
+                    break;
 
-                    case 'gold': // Relíquia Sagrada
-                        // Aura dourada brilhante
+                case 'gold': // Relíquia Sagrada
+                    // Aura divina
+                    const divineGlow = 0.4 + Math.sin(this.game.frameCount * 0.05) * 0.2;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 10, 0, Math.PI * 2);
+                    const divineGradient = ctx.createRadialGradient(
+                        this.x, this.y, this.radius,
+                        this.x, this.y, this.radius + 10
+                    );
+                    divineGradient.addColorStop(0, `rgba(255, 215, 0, ${divineGlow})`);
+                    divineGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                    ctx.fillStyle = divineGradient;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Símbolos sagrados
+                    for (let i = 0; i < 4; i++) {
+                        const angle = (this.game.frameCount * 0.02) + (i * Math.PI / 2);
+                        const x = this.x + Math.cos(angle) * 30;
+                        const y = this.y + Math.sin(angle) * 30;
+
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(angle);
+                        
+                        // Símbolo
                         ctx.beginPath();
-                        ctx.arc(x, y, 3, 0, Math.PI * 2);
-                        ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
-                        ctx.stroke();
+                        ctx.moveTo(-5, -5);
+                        ctx.lineTo(5, -5);
+                        ctx.lineTo(0, 5);
                         ctx.closePath();
-                        break;
+                        ctx.fillStyle = `rgba(255, 215, 0, ${0.7 + Math.sin(this.game.frameCount * 0.1) * 0.3})`;
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.stroke();
+                        
+                        ctx.restore();
+                    }
+                    break;
 
-                    case 'rainbow': // Prisma Dimensional
-                        // Rastros de energia dimensional
-                        const hue = (this.game.frameCount * 2 + i * 120) % 360;
+                case 'rainbow': // Prisma Dimensional
+                    // Aura dimensional
+                    for (let i = 0; i < 360; i += 30) {
+                        const hue = (i + this.game.frameCount * 2) % 360;
+                        const angle = (i * Math.PI / 180);
+                        const distance = this.radius + 10 + Math.sin(this.game.frameCount * 0.05) * 5;
+                        
                         ctx.beginPath();
-                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.moveTo(this.x, this.y);
+                        ctx.lineTo(
+                            this.x + Math.cos(angle) * distance,
+                            this.y + Math.sin(angle) * distance
+                        );
                         ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+                        ctx.lineWidth = 2;
                         ctx.stroke();
                         ctx.closePath();
-                        break;
-                }
+                    }
+
+                    // Partículas dimensionais
+                    for (let i = 0; i < 8; i++) {
+                        const time = this.game.frameCount * 0.05 + i;
+                        const angle = time + (i * Math.PI * 2 / 8);
+                        const distance = 25 + Math.sin(time) * 10;
+                        const x = this.x + Math.cos(angle) * distance;
+                        const y = this.y + Math.sin(angle) * distance;
+                        const hue = (this.game.frameCount * 2 + i * 45) % 360;
+                        
+                        // Partícula
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        const particleGradient = ctx.createRadialGradient(x, y, 0, x, y, 3);
+                        particleGradient.addColorStop(0, `hsla(${hue}, 100%, 50%, 0.8)`);
+                        particleGradient.addColorStop(1, `hsla(${hue}, 100%, 50%, 0)`);
+                        ctx.fillStyle = particleGradient;
+                        ctx.fill();
+                        ctx.closePath();
+
+                        // Rastro dimensional
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(
+                            x - Math.cos(angle) * 8,
+                            y - Math.sin(angle) * 8
+                        );
+                        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.closePath();
+                    }
+                    break;
             }
         }
 
