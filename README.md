@@ -90,7 +90,7 @@ Agradecemos a todos que apoiam o projeto! Você pode se tornar um apoiador atrav
 
 - 🎁 [Doar via PayPal](https://www.paypal.com/donate/?business=2KX84Y9DCRQ2U&no_recurring=0&item_name=Doa%C3%A7ao+Espontanea&currency_code=BRL)
 
-### 🏆 Apoiadores Atuais
+### 🌟 Apoiadores Atuais
 - Nível Lendário (R$100+)
   - [Seu nome aqui]
 - Nível Épico (R$50+)
@@ -100,7 +100,13 @@ Agradecemos a todos que apoiam o projeto! Você pode se tornar um apoiador atrav
 
 ## 📜 Licença
 
-Este projeto está licenciado sob a [Licença ISC](LICENSE).
+Copyright © 2024 AdminhuDev. Todos os direitos reservados.
+
+Este software é protegido por direitos autorais e seu uso, cópia, modificação ou distribuição
+sem autorização expressa por escrito do autor é estritamente proibido.
+
+Para licenciamento comercial ou permissões de uso, entre em contato:
+- 📧 Telegram: [@Analista_Adminhu](https://t.me/Analista_Adminhu)
 
 ## 📞 Contato
 
