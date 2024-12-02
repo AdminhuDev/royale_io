@@ -139,6 +139,14 @@ export class Player {
     }
 
     render(ctx, mouseX, mouseY, isLocal = false) {
+        // Atualizar cor da skin rainbow se necessário
+        if (isLocal && this.game) {
+            const skin = this.game.skinManager.skins[this.game.skinManager.currentSkin];
+            if (skin.color === 'rainbow') {
+                this.skinColor = `hsl(${(this.game.frameCount * 2) % 360}, 100%, 50%)`;
+            }
+        }
+
         // Desenhar o jogador
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);

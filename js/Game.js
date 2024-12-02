@@ -187,7 +187,9 @@ export class Game {
         
         // Definir a cor da skin
         const skin = this.skinManager.skins[this.skinManager.currentSkin];
-        this.localPlayer.skinColor = skin.color === 'rainbow' ? '#ff0000' : skin.color;
+        this.localPlayer.skinColor = skin.color === 'rainbow' ? 
+            `hsl(${(this.frameCount * 2) % 360}, 100%, 50%)` : 
+            skin.color;
     }
 
     movePlayer() {
